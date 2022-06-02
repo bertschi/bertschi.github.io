@@ -1,0 +1,14 @@
+---
+title: "Thinking in code"
+author: "Nils Bertschinger"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+---
+
+Random thoughts on this and that, i.e., mainly coding ...
