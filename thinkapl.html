@@ -278,6 +278,28 @@ if (window.hljs) {
 
 
 
+<style type="text/css">
+/* for pandoc --citeproc since 2.11 */
+div.csl-bib-body { }
+div.csl-entry {
+  clear: both;
+}
+.hanging div.csl-entry {
+  margin-left:2em;
+  text-indent:-2em;
+}
+div.csl-left-margin {
+  min-width:2em;
+  float:left;
+}
+div.csl-right-inline {
+  margin-left:2em;
+  padding-left:1em;
+}
+div.csl-indent {
+  margin-left: 2em;
+}
+</style>
 
 
 
@@ -297,15 +319,554 @@ be</em></h4>
 
 
 <p><label for="tufte-mn-1" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-1" class="margin-toggle"><span class="marginnote"><span style="display: block;"><a href="index.html">Blog home</a></span> <span style="display: block;"><a href="about.html">About me</a></span> <span style="display: block;"><a href="privacy.html">Privacy</a></span></span></p>
-<hr />
 <div id="thinking-in-code" class="section level1">
 <h1>Thinking in code</h1>
-<div id="june-9-2022" class="section level2">
-<h2>June 9, 2022</h2>
-<p>An opiniated piece on the “two-language problem” in machine learning
-and my first adventures in APL/J.</p>
-<p><a href="thinkapl.html">Yes please, take me there</a></p>
-<hr />
+<p>The “two-language problem” is often discussed in data science and
+machine learning – especially by advocates of the <em>Julia</em>
+programming language. Essentially, it refers to the current situation
+that algorithms are often prototyped in higher-level dynamic languages
+such as R or Python. Yet, for reasons of efficiency the final
+implementation is then ported to Fortran or more commonly nowadays C++.
+Thus, several versions of the same algorithm have to be implemented in
+different programming languages which are either convenient for
+prototyping or sufficiently constrained to support an optimizing
+compiler.</p>
+<p><label for="tufte-mn-2" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-2" class="margin-toggle"><span class="marginnote"><span style="display: block;">Julia could actually
+solve another version of the “two-language problem” here, namely that
+modern ML toolboxes have become yet another programming language in
+their own right: First, by supporting a restricted subset of their host
+language and secondly, by introducing special control structures
+enabling better static optimizations.</span></span></p>
+<p>Here, I want to argue that machine learning suffers from the
+“two-language problem” already at a more fundamental level. Namely, the
+impedance mismatch between formal mathematical notation – used when
+thinking about and deriving model equations – and the actual programming
+language used for implementation. While modern toolboxes such as PyTorch
+and TensorFlow readily support many matrix and tensor operations, they
+are still verbose when compared to mathematical notation. Furthermore,
+they commonly require expressing control flow in addition to the desired
+computation thereby hiding the actual intend of the code. Accordingly,
+they are rarely used as the formal language for developing and thinking
+about models.</p>
+<p>What if the formal notation and programming language were just the
+same?</p>
+</div>
+<div id="aplj" class="section level1">
+<h1>APL/J</h1>
+<blockquote>
+<p>In addition to the executability and universality emphasized in the
+introduction, a good notation should embody characteristics familiar to
+any user of mathematical notation:</p>
+<p>• Ease of expressing constructs arising in problems.</p>
+<p>• Suggestivity.</p>
+<p>• Ability to subordinate detail.</p>
+<p>• Economy.</p>
+<p>• Amenability to formal proofs.</p>
+<footer>
+Kenneth E. Iverson
+</footer>
+</blockquote>
+<p>With this goal in mind, Kenneth Iverson <span class="citation">(Iverson 1980)</span> has created an unambiguous and
+terse alternative to mathematical notation itself and used it as the
+basis for different programming languages. In particular, <em>APL</em>
+has also become known as <em>Iverson notation</em> and was taught in
+introductory mathematics courses as well as used by researchers as a
+means of communicating formal ideas. I had a serious look at APL, after
+seeing this video showing how Conway’s Game of Life could be implemented
+in a <a href="https://www.youtube.com/watch?v=a9xAKttWgP4">single
+line</a> of APL!</p>
+<p>APL is infamous for its special single-character glyphs used to
+denote most of its operators. Furthermore, its semantics appears
+somewhat inconsistent and confusing at times. Thus, here I will use
+<strong>J</strong>, a more recent and open source reincarnation of APL.
+In contrast to APL, J relies on ASCII characters exclusively – making it
+easier to type, but not necessarily to read<label for="tufte-sn-1" class="margin-toggle sidenote-number">1</label><input type="checkbox" id="tufte-sn-1" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">1</span> Arguably, ASCII characters lose much of the beauty of
+the original notation.</span>. Most importantly, the
+semantics has been unified making it substantially simpler and more
+consistent.</p>
+<p>As an array programming language, the basic data structures of J are
+multi-dimensional arrays – also known as tensors. In turn, most
+operators automatically extend across array arguments in a systematic
+fashion, e.g.</p>
+<pre class="j"><code>   1 + 2
+3
+   1 2 3 + 4 5 6  NB. + can operate on vectors
+5 7 9</code></pre>
+<p>Here, and in the following, user input is shown indented whereas the
+output of the J interpreter is aligned left. Comments in J are marked
+with <code>NB.</code> and extend to the end of a line. Most operators
+have a different meaning when used with one (monadic) or two arguments
+(dyadic). Furthermore, expressions should be read from right to left and
+all operators have the same precedence<label for="tufte-sn-2" class="margin-toggle sidenote-number">2</label><input type="checkbox" id="tufte-sn-2" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">2</span> APL/J intentionally breaks with mathematical traditions
+when these are slightly inconsistent. Being more regular, it is actually
+easier to learn and often requires fewer parenthesis.</span>. More precisely,
+operators associate to the right and accordingly <code>2 * 3 + 4</code>
+is interpreted as <span class="math inline">\(2 \cdot (3 +
+4)\)</span>.</p>
+<p>Every array has a <em>rank</em>, i.e., its number of dimensions/axes,
+and a <em>shape</em>, i.e., the vector listing the number of elements in
+each dimension. The monadic operators <code>$</code> (<em>shape</em>)
+and <code>#</code> (<em>tally</em>) can be used to query the shape and
+rank of an array as follows:</p>
+<pre class="j"><code>   i. 2 3 4  NB. creates array of shape 2 3 4 containing 0, 1, ...
+ 0  1  2  3
+ 4  5  6  7
+ 8  9 10 11
+
+12 13 14 15
+16 17 18 19
+20 21 22 23
+   $ i. 2 3 4  NB. the shape of i. 2 3 4
+2 3 4
+   # $ i. 2 3 4  NB. rank is number of elements in shape
+3</code></pre>
+<p>When a dyadic operator is applied to arrays of different ranks, a
+simple rule is used for broadcasting: the smaller array is extended over
+the larger one, whenever its shape is a prefix of the shape of the
+larger array, e.g.,</p>
+<pre class="j"><code>   1 2 + i. 2 3  NB. shape of 2 vector matches first axes of 2 3 matrix
+1 2 3
+5 6 7
+   1 2 3 + i. 2 3  NB. length error as shape is not a prefix
+|length error
+|   1 2 3    +i.2 3
+   1 + i. 2 3  NB. scalar has empty shape and can always be broadcasted
+1 2 3
+4 5 6
+   (i. 2 3) + i. 2 3 4
+ 0  1  2  3
+ 5  6  7  8
+10 11 12 13
+
+15 16 17 18
+20 21 22 23
+25 26 27 28</code></pre>
+<div id="verb-rank" class="section level2">
+<h2>Verb rank</h2>
+<p>In particular, the <em>rank</em> of an operator<label for="tufte-sn-3" class="margin-toggle sidenote-number">3</label><input type="checkbox" id="tufte-sn-3" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">3</span> Not just every array/value has a rank, but also every
+verb. These are separate concepts.</span> – called <em>verb</em>
+in J – is an interesting and very useful concept. Consider a shape 2 3 4
+array <code>A</code> of rank 3. Depending on need, this can be
+considered as an 2 3 4 array of <em>cells</em> (scalars of rank 0), as
+an 2 3 array of 4-vectors, as a 2 vector of 3 4 matrices or a single
+cell of 2 3 4 arrays. To illustrate this, let’s apply the verb
+<code>&lt;</code> at different ranks.</p>
+<p>The verb <code>&lt;</code> <em>encloses</em> or <em>boxes</em> a
+value when used monadically<label for="tufte-sn-4" class="margin-toggle sidenote-number">4</label><input type="checkbox" id="tufte-sn-4" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">4</span> Unsurprisingly, <code>&lt;</code> is <em>less than</em>
+when used dyadically.</span>. A boxed value is considered as a scalar
+and can be unboxed with <code>&gt;</code>. In contrast to APL, J is more
+consistent and strict in distinguishing boxed and unboxed values. In J,
+boxed values are shown with a box around its value and arrays can only
+contain values of different types when these are boxed<label for="tufte-sn-5" class="margin-toggle sidenote-number">5</label><input type="checkbox" id="tufte-sn-5" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">5</span> A box is similar to a reference type, but always
+explicit, e.g., <code>&lt; 1 2</code> is similar to
+<code>Ref([1, 2])</code> in Julia.</span>.</p>
+<pre class="j"><code>   A =. i. 2 3 4  NB. assign 2 3 4 tensor of indices to A
+   &lt;&quot;0 A  NB. box at rank 0 =&gt; 2 3 4 array of boxed cells
+┌──┬──┬──┬──┐
+│0 │1 │2 │3 │
+├──┼──┼──┼──┤
+│4 │5 │6 │7 │
+├──┼──┼──┼──┤
+│8 │9 │10│11│
+└──┴──┴──┴──┘
+
+┌──┬──┬──┬──┐
+│12│13│14│15│
+├──┼──┼──┼──┤
+│16│17│18│19│
+├──┼──┼──┼──┤
+│20│21│22│23│
+└──┴──┴──┴──┘
+   &lt;&quot;1 A  NB. box at rank 1 =&gt; 2 3 matrix of boxed 4 vectors
+┌───────────┬───────────┬───────────┐
+│0 1 2 3    │4 5 6 7    │8 9 10 11  │
+├───────────┼───────────┼───────────┤
+│12 13 14 15│16 17 18 19│20 21 22 23│
+└───────────┴───────────┴───────────┘
+   &lt;&quot;2 A  NB. 2 vector of boxed 3 4 matrices
+┌─────────┬───────────┐
+│0 1  2  3│12 13 14 15│
+│4 5  6  7│16 17 18 19│
+│8 9 10 11│20 21 22 23│
+└─────────┴───────────┘
+   &lt;&quot;3 A  NB. single box containing 2 3 4 array
+┌───────────┐
+│ 0  1  2  3│
+│ 4  5  6  7│
+│ 8  9 10 11│
+│           │
+│12 13 14 15│
+│16 17 18 19│
+│20 21 22 23│
+└───────────┘</code></pre>
+<p>Thus, the rank denotes at which level the verb is applied, i.e., rank
+0 means that it acts on cells, rank 1 on vectors and so on. The final
+result is then obtained, by moving into the tensor until the desired
+rank is reached, applying the verb there and collecting all results into
+a tensor. In J, the prefix of the shape that needed to be traversed
+until the desired rank of the verb was reached is referred to as its
+<em>frame</em>, i.e., when applying <code>&lt;&quot;2</code> to an 2 3 4
+array, the frame has shape 2 and <code>&lt;</code> is applied to each 3
+4 matrix of rank 2. Thus, the result is a 2 vector of boxed 3 4
+arrays.</p>
+<p>The notion of verb rank unifies many operations on arrays. As another
+example consider the verb <code>+/</code> – actually an adverb modified
+by the <code>+</code> operator/verb – which sums an array along its
+first axis. Then,</p>
+<pre class="j"><code>   $ +/&quot;2 i. 2 3 4 5
+2 3 5</code></pre>
+<p>i.e., by applying <code>+/</code> at rank 2 we have summed out the
+second to last axis, leading to a result array of shape 2 3 5 where 2 3
+was the shape of the frame and 5 corresponds to the shape of the
+result!</p>
+<p><label for="tufte-mn-3" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-3" class="margin-toggle"><span class="marginnote"><span style="display: block;">The
+<a href="https://code.jsoftware.com/wiki/NuVoc">J vocabulary</a>
+provides an overview of all verbs/adverbs etc in J, including the ones
+introduced by now.</span></span></p>
+</div>
+</div>
+<div id="machine-learning-algorithms" class="section level1">
+<h1>Machine learning algorithms</h1>
+<div id="k-means" class="section level2">
+<h2>K-means</h2>
+<p>As a warm-up exercise with this notation, let’s implement the basic
+K-means algorithm <span class="citation">(Bishop 2006)</span> given by
+the two update equations</p>
+<p><span class="math display">\[
+r_{nk} = \left\{ \begin{array}{cl}
+1 &amp; \mbox{ if } k = \mathrm{argmin}_j ||\mathbf{x}_n -
+\mathbf{\mu}_j||^2 \\
+0 &amp; \mbox{ otherwise} \end{array} \right.
+\]</span></p>
+<p>matching the input vectors <span class="math inline">\(\mathbf{x}_n\)</span> to the current cluster
+centers <span class="math inline">\(\mathbf{\mu}_k\)</span> and then
+computing a new set of cluster centers</p>
+<p><span class="math display">\[
+\mathbf{\mu}_k = \frac{\sum_n r_{nk} \mathbf{x}_n}{\sum_n r_{nk}} \; .
+\]</span></p>
+<p>First, define a function to compute the squared <span class="math inline">\(L_2\)</span> distance between two vectors</p>
+<pre class="j"><code>   dist2 =: dyad : &#39;+/ *: x - y&#39;  NB. left and right arguments are x and y</code></pre>
+<p><label for="tufte-mn-4" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-4" class="margin-toggle"><span class="marginnote"><span style="display: block;">dyadic verbs <code>=.</code> and <code>=:</code>
+are local and global <em>assignment</em></span>
+<span style="display: block;">monadic verb <code>*:</code> is
+<em>square</em></span> <span style="display: block;">dyadic adverb
+<code>/</code> is <em>table</em>, e.g. outer product</span> <span style="display: block;">monadic adverb <code>/</code> is
+<em>insert</em>, i.e., reduce or fold right.</span></span></p>
+<p>and apply it at rank 1 to an <code>n d</code> data matrix and
+<code>k d</code> means in an tabular fashion, i.e., as an outer product,
+to obtain the <code>n k</code> pairwise distances:</p>
+<pre class="j"><code>   $ X =. i. 7 4  NB. show only shape of example arrays to save space
+7 4
+   $ mu =. i. 3 4
+3 4
+   $ d =. X dist2&quot;1/ mu
+7 3</code></pre>
+<p>The matrix <code>r</code> is then obtained by comparing the row-wise
+minima with the actual values</p>
+<p><label for="tufte-mn-5" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-5" class="margin-toggle"><span class="marginnote"><span style="display: block;">dyadic verb
+<code>=</code> is <em>equality</em>, returning boolean/bit, i.e., 0 or
+1</span> <span style="display: block;">dyadic verb <code>&lt;.</code> is
+<em>minimum</em></span> <span style="display: block;">dyadic verb
+<code>%</code> is <em>division</em></span></span></p>
+<pre class="j"><code>   $ r =. d = &lt;./&quot;1 d
+7 3
+   r
+1 0 0
+0 1 0
+0 0 1
+0 0 1
+0 0 1
+0 0 1
+0 0 1</code></pre>
+<p>and the update equation for the means can be stated as</p>
+<p><label for="tufte-mn-6" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-6" class="margin-toggle"><span class="marginnote"><span style="display: block;">Compare
+<code>(+/ r */“1 X) % (+/ r)</code> to the mathematical
+expression</span> <span style="display: block;"><span class="math display"><span class="math display">\[ \frac{\sum_n r_{nk}
+\mathbf{x}_n}{\sum_n r_{nk}} \]</span></span></span> <span style="display: block;">Which one is more readable? Remember how long
+you had to study math to use it fluently!</span></span></p>
+<pre class="j"><code>   (+/ r */&quot;1 X) % (+/ r)
+ 0  1  2  3
+ 4  5  6  7
+16 17 18 19</code></pre>
+<p>Putting everything together, the K-means algorithm is obtained by
+iterating its update step to convergence:</p>
+<pre class="j"><code>   KMeansStep =: dyad define
+r =. d = &lt;./&quot;1 d =. x dist2&quot;1/ y  NB. pairwise distances assigned to d inline
+(+/ r */&quot;1 x) % (+/ r)
+)
+   X KMeansStep ^: _ mu  NB. iterate ^: to infinity _
+ 2  3  4  5
+10 11 12 13
+20 21 22 23</code></pre>
+<p><label for="tufte-mn-7" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-7" class="margin-toggle"><span class="marginnote"><span style="display: block;"><strong>Exercises</strong>:</span> <span style="display: block;">Why does broadcasting work in <code>d = &lt;./“1
+d</code>?</span> <span style="display: block;">What is the shape of
+<code>r */“1 X</code>?</span> <span style="display: block;">Explain
+difference between <code>a +/“1 b</code> and <code>a +”1/
+b</code>.</span></span></p>
+</div>
+<div id="neural-networks" class="section level2">
+<h2>Neural networks</h2>
+<p>As an other example, Consider a dense feed-forward layer, i.e.,</p>
+<p><span class="math display">\[
+f(\mathbf{x}) = \mathrm{relu}\left( \mathbf{W} \mathbf{x} + \mathbf{b}
+\right) \; .
+\]</span></p>
+<p>In J, this can be easily implemented via</p>
+<pre class="j"><code>   relu =: monad : &#39;0 &gt;. y&#39;
+   dense =: adverb define
+&#39;W b&#39; =. x  NB. unpack parameters which conveniently unboxes if needed
+u b + W +/ .* y
+)</code></pre>
+<p>and can be used as follows:</p>
+<p><label for="tufte-mn-8" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-8" class="margin-toggle"><span class="marginnote"><span style="display: block;">Parameters are boxed
+and collected in a vector. Here, a named tuple or object as in Python or
+Julia would be slightly more convenient and readable.</span></span></p>
+<pre class="j"><code>   ] W =. ? 2 3 $ 0  NB. use ] to show assigned value
+0.0688955  0.27686 0.271178
+ 0.797844 0.357451 0.817211
+   b =. _2 2
+   ] params =. (&lt;W), &lt;b
+┌───────────────────────────┬────┐
+│0.0688955  0.27686 0.271178│_2 2│
+│ 0.797844 0.357451 0.817211│    │
+└───────────────────────────┴────┘
+   params relu dense 1 2 3
+0 5.96438</code></pre>
+<p><label for="tufte-mn-9" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-9" class="margin-toggle"><span class="marginnote"><span style="display: block;">dyadic
+phrase <code>+/ . *</code> is <em>dot product</em></span> <span style="display: block;">monadic verb <code>?</code> is <em>roll</em>,
+i.e., random draw</span> <span style="display: block;">monadic verb
+<code>]</code> is <em>same</em>, i.e., identity</span> <span style="display: block;">dyadic verb <code>$</code> is
+<em>reshape</em></span> <span style="display: block;">dyadic verb
+<code>,</code> is <em>ravel</em></span></span></p>
+<p>Now, applying a dense layer at a (right) rank of 1 we can easily
+compute it over a whole batch of data<label for="tufte-sn-6" class="margin-toggle sidenote-number">6</label><input type="checkbox" id="tufte-sn-6" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">6</span> In general, a dyadic verb can be applied at different
+ranks for the left and right argument. Here, rank 1 works for both
+arguments.</span>:</p>
+<pre class="j"><code>   $ batch =. ? 8 3 $ 0
+8 3
+   $ params relu dense&quot;1 batch
+8 2</code></pre>
+<p>This is not just cool, but also very convenient when defining more
+complicated models, e.g., transformers <span class="citation">(Vaswani
+et al. 2017)</span> with additional dimensions for token position and
+and multi-head attention.</p>
+</div>
+<div id="transformers" class="section level2">
+<h2>Transformers</h2>
+<p>Assuming that tokenization and embedding has already been taken care
+of, a sentence can be represented as a <code>T D</code> matrix where
+<code>T</code> indexes token position and <code>D</code> embedding
+dimensions.</p>
+<p>The attention head first computes several vectors <span class="math inline">\(q, k\)</span> and <span class="math inline">\(v\)</span> from each word in the input
+sentence:</p>
+<pre class="j"><code>   rand =: monad : &#39;(2 * ? y $ 0) - 1&#39;
+   T =. 5
+   D =. 4
+   $ sentence =. rand (T, D)
+5 4
+   Q =. 3  NB. dimensionality of latent vectors
+   theta =. &lt;&quot;2 rand (3, D, Q)  NB. pack parameter matrices
+   &#39;Wq Wk Wv&#39; =. theta  NB. unpack parameters
+   q =. sentence +/ . * Wq
+   k =. sentence +/ . * Wk
+   v =. sentence +/ . * Wv</code></pre>
+<p>Now, each <span class="math inline">\(q_t\)</span> is paired with
+each <span class="math inline">\(k_t\)</span> and their scalar product
+is computed</p>
+<pre class="j"><code>   att =. q (+/ . *)&quot;1/ k
+   att =. (%: Q) %~ att  NB. divide by sqrt of Q</code></pre>
+<p>and then normalized along the last axis, i.e., <span class="math inline">\(k\)</span>’s position in the sentence, via the
+softmax function:</p>
+<pre class="j"><code>   softmax =: monad : &#39;(+/ z) %~ z =. ^ y&#39;
+   $ att =. softmax&quot;1 (%: Q) %~ q (+/ . *)&quot;1/ k
+5 5</code></pre>
+<p>Finally, the values are weighted by the attention:</p>
+<pre class="j"><code>   $ z =. att +/ . * v  NB. alternatively +/&quot;2 att *&quot;1 _ v
+5 3</code></pre>
+<p>Putting everything together, a single attention head works as
+follows:</p>
+<p><label for="tufte-mn-10" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-10" class="margin-toggle"><span class="marginnote"><span style="display: block;">monadic verb
+<code>%:</code> is <em>sqrt</em></span> <span style="display: block;">dyadic adverb <code>~</code> flips left and
+right argument of a verb</span> <span style="display: block;">dyadic
+verb <code>{</code> is <em>from</em>, selecting elements by
+index</span></span></p>
+<pre class="j"><code>   head =: dyad define
+&#39;Wq Wk Wv&#39; =. x  NB. unpack parameters
+q =. y +/ . * Wq
+k =. y +/ . * Wk
+v =. y +/ . * Wv
+att =. softmax&quot;1 (%: _1 { $ q) %~ q (+/ . *)&quot;1/ k
+att +/ . * v
+)</code></pre>
+<p>Now, a multi-head can simple be obtained by applying the verb for a
+single head at the correct rank across multiple parameters vectors:</p>
+<pre class="j"><code>   $ mh =. (theta ,: - each theta) head&quot;1 _ sentence  NB. dual head example
+2 5 3
+   $ (,&quot;2) 0 |: mh  NB. move head axis to end and ravel last two axes
+5 6</code></pre>
+<p><label for="tufte-mn-11" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-11" class="margin-toggle"><span class="marginnote"><span style="display: block;">dyadic verb
+<code>,:</code> is <em>laminate</em> (similar to
+<code>vstack</code>)</span> <span style="display: block;">dyadic verb
+<code>|:</code> is <em>rearrange axes</em></span></span></p>
+<p>Thus, using this trick we can define a multi-head function which
+applies all heads and then projects the concatenated results down to a
+lower dimension by multiplying with a <code>(H*Q) D</code> matrix <span class="math inline">\(W_o\)</span>:</p>
+<pre class="j"><code>   multihead =: dyad define
+&#39;Wo thetas&#39; =. x
+res =. (,&quot;2) 0 |: thetas head&quot;1 _ y
+res +/ . * Wo
+)</code></pre>
+<p>Finally, defining a layer normalization verb</p>
+<pre class="j"><code>   layernorm =: dyad define
+&#39;a s&#39; =. x
+mu =. (+/ y) % # y
+var =. +/ *: y - mu
+a + s * (y - mu) % %: var
+)</code></pre>
+<p>and a simple two-layer network</p>
+<pre class="j"><code>   mlp =: dyad define  NB. simple 2-layer network
+&#39;layer1 layer2&#39; =. x
+layer2 ] dense (layer1 relu dense y)
+)</code></pre>
+<p>we can put everything together into an attention layer:</p>
+<pre class="j"><code>   attlayer =: dyad define
+&#39;mh ln1 dn ln2&#39; =. x  NB. unpack layer parameters
+hidden =. ln1 layernorm&quot;_ 1 y + mh multihead y  NB. rank 1 to apply layernorm
+ln2 layernorm&quot;_ 1 hidden + dn mlp&quot;_ 1 hidden    NB. and MLP at each position
+)</code></pre>
+<p><label for="tufte-mn-12" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-12" class="margin-toggle"><span class="marginnote"><span style="display: block;"><strong>Exercises</strong>:</span> <span style="display: block;">Add positional encoding and causal masking to
+the transformer model.</span></span></p>
+<p>Let’s put together some example parameters</p>
+<pre class="j"><code>mh_params =. (&lt; rand (8*Q), D), &lt; &lt;&quot;2 rand (8, 3, D, Q)
+ln_params =. 0 1
+mlp_params =. (&lt; (&lt; rand (7, D)), &lt; rand 7), &lt; (&lt; rand (D, 7)), &lt; rand D
+theta =. (&lt; mh_params), (&lt; ln_params), (&lt; mlp_params), &lt; ln_params</code></pre>
+<p>and just because it is so easy apply it to a batch of several
+sentences:</p>
+<pre class="j"><code>   $ theta attlayer&quot;_ 2 rand (16, T, D)
+16 5 4</code></pre>
+<p><label for="tufte-mn-13" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-13" class="margin-toggle"><span class="marginnote"><span style="display: block;">Compare this code to
+other expositions, e.g., <a href="http://jalammar.github.io/illustrated-transformer/">illustrating
+transformers</a> with large colorful images, or implementations, e.g.,
+<a href="https://github.com/keras-team/keras/blob/v2.9.0/keras/layers/attention/multi_head_attention.py#L122-L515">tf.keras.layers.MultiHeadAttention</a>
+programmatically computing Einsum equations. Also papers are sometimes
+less precise, i.e., applying softmax and layer normalization functions
+without stating the exact tensor dimension at which these act, and
+additional code reviews are needed to ensure that the stated equations
+are correctly implemented.</span></span></p>
+</div>
+<div id="final-notes" class="section level2">
+<h2>Final notes</h2>
+<blockquote>
+<p>Finally, overemphasis of efficiency leads to an unfortunate
+circularity in design: for reasons of efficiency early programming
+languages reflected the characteristics of the early computers, and each
+generation of computers reflects the needs of the programming languages
+of the preceding generation.</p>
+<footer>
+Kenneth E. Iverson
+</footer>
+</blockquote>
+<p>Besides providing for a concise implementation of machine learning
+models, the APL/J notation can also be used think about an
+implementation, e.g., in order to derive a simpler or more efficient
+version. Reconsider for example the expression <code>+/ r */&quot;1 x</code>
+used in the definition of K-means. Thinking about its action on the axes
+of <code>r</code> (an <code>N K</code> matrix) and <code>x</code> (an
+<code>N D</code> matrix), i.e., switching to an explicit index notation,
+we see that <code>r */&quot;1 x</code> is an <code>N K D</code> tensor with
+elements <span class="math inline">\((\verb|r */&quot;1 x|)_{nkd} =
+r_{nk} x_{nd}\)</span> and thus,</p>
+<p><span class="math display">\[
+(\verb|+/ r */&quot;1 x|)_{kd} = \sum_n r_{nk} x_{nd} \; .
+\]</span></p>
+<p>Accordingly, using matrix multiplication, i.e., obtained from the
+generalized inner product in J as <code>+/ . *</code>, and transposition
+<code>|:</code>, it can also be represented as
+<code>(|: r) +/ . * x</code>.</p>
+<p>I had not actually seen that identity before deriving it in this
+fashion! Compared to its corresponding mathematical expression<label for="tufte-sn-7" class="margin-toggle sidenote-number">7</label><input type="checkbox" id="tufte-sn-7" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">7</span> A well-known identity between matrix multiplication and
+the sum of outer products between the columns of <span class="math inline">\(\mathbf{A}\)</span> and rows of <span class="math inline">\(\mathbf{B}\)</span>.</span>, i.e.,</p>
+<p><span class="math display">\[
+\mathbf{A} \mathbf{B} =
+\sum_k \mathbf{a}^{\mathrm{col}}_k \otimes \mathbf{b}^{\mathrm{row}}_k
+\; ,
+\]</span></p>
+<p>it is (arguably) even simpler in J, nicely illustrating its power not
+just for implementing algorithms, but also as a technical notation
+amenable to formal manipulations<label for="tufte-sn-8" class="margin-toggle sidenote-number">8</label><input type="checkbox" id="tufte-sn-8" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">8</span> Other examples can be found in the works of Ken Iverson
+or on the Dyalog APL website, e.g., <a href="http://dfns.dyalog.com/n_life.htm">golfing</a> the famous APL code
+for the Game of Life.</span>.</p>
+<p>In the end, shorter code not just enables faster exploration and
+prototyping of algorithms. Reasoning about code on a higher-level of
+abstraction also opens up possibilities for optimization via
+<em>equational reasoning</em>. The only other language, that I have seen
+being used in this fashion is Haskell. Here, stream fusion as
+exemplified in the functor law
+<code>fmap f . fmap g == fmap (f . g)</code> or the works of Richard
+Bird <span class="citation">(Bird 2006)</span>, e.g., deriving an
+efficient Sudoku solver from a brute-force specification, come to
+mind.</p>
+<p>In the end, APL/J has some interesting tricks under its sleeves –
+also for modern machine learning – and is certainly is fresh blast from
+the past. For inspiration and contemplation the full transformer code is
+repeated here …</p>
+<pre class="j"><code>   relu =: monad : &#39;0 &gt;. y&#39;
+   dense =: adverb define
+&#39;W b&#39; =. x
+u b + W +/ .* y
+)
+   softmax =: monad : &#39;(+/ z) %~ z =. ^ y&#39;
+   head =: dyad define
+&#39;Wq Wk Wv&#39; =. x  NB. unpack parameters
+q =. y +/ . * Wq
+k =. y +/ . * Wk
+v =. y +/ . * Wv
+att =. softmax&quot;1 (%: _1 { $ q) %~ q (+/ . *)&quot;1/ k
+att +/ . * v
+)
+   multihead =: dyad define
+&#39;Wo thetas&#39; =. x  
+res =. (,&quot;2) 0 |: thetas head&quot;1 _ y
+res +/ . * Wo
+)
+   layernorm =: dyad define
+&#39;a s&#39; =. x
+mu =. (+/ y) % # y
+var =. +/ *: y - mu
+a + s * (y - mu) % %: var
+)
+   mlp =: dyad define
+&#39;layer1 layer2&#39; =. x
+layer2 ] dense (layer1 relu dense y)
+)
+   attlayer =: dyad define
+&#39;mh ln1 dn ln2&#39; =. x  NB. unpack layer parameters
+hidden =. ln1 layernorm&quot;_ 1 y + mh multihead y  NB. apply layernorm and MLP at each position
+ln2 layernorm&quot;_ 1 hidden + dn mlp&quot;_ 1 hidden
+)</code></pre>
+<div id="refs" class="references csl-bib-body hanging-indent">
+<div id="ref-Sudoku" class="csl-entry">
+Bird, Richard S. 2006. <span>“FUNCTIONAL PEARL: A Program to Solve
+Sudoku.”</span> <em>Journal of Functional Programming</em> 16: 671–79.
+<a href="https://doi.org/10.1017/S0956796806006058">https://doi.org/10.1017/S0956796806006058</a>.
+</div>
+<div id="ref-PRML" class="csl-entry">
+Bishop, Christopher. 2006. <em>Pattern Recognition and Machine
+Learning</em>. Springer. <a href="https://www.microsoft.com/en-us/research/publication/pattern-recognition-machine-learning/">https://www.microsoft.com/en-us/research/publication/pattern-recognition-machine-learning/</a>.
+</div>
+<div id="ref-Iverson" class="csl-entry">
+Iverson, Kenneth E. 1980. <span>“Notation as a Tool of Thought.”</span>
+<em>Commun. ACM</em> 23 (8): 444–65. <a href="https://doi.org/10.1145/358896.358899">https://doi.org/10.1145/358896.358899</a>.
+</div>
+<div id="ref-Transformer" class="csl-entry">
+Vaswani, Ashish, Noam Shazeer, Niki Parmar, Jakob Uszkoreit, Llion
+Jones, Aidan N. Gomez, Łukasz Kaiser, and Illia Polosukhin. 2017.
+<span>“Attention Is All You Need.”</span> In <em>Proceedings of the 31st
+International Conference on Neural Information Processing Systems</em>,
+6000–6010. NIPS’17. Red Hook, NY, USA: Curran Associates Inc.
+</div>
+</div>
 </div>
 </div>
 
