@@ -1,6 +1,6 @@
 ---
-title: "Thinking in code"
-author: "Nils Bertschinger"
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
 output:
   tufte::tufte_handout:
     latex_engine: xelatex
@@ -11,4 +11,23 @@ sansfont: LiberationSans
 monofont: LiberationMono
 ---
 
-Random thoughts on this and that, i.e., mainly coding ...
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+---
+
+# Thinking in code
+
+## June 9, 2022
+
+An opiniated piece on the "two-language problem" in machine learning
+and my first adventures in APL/J.
+
+[Yes please, take me there](thinkapl.html)
+
+---

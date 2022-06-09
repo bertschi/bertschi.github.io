@@ -1,0 +1,35 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+## Hi, I'm Nils
+
+![](me.jpg)
+
+and this is my personal blog. Here, I will occasionally post thoughts
+on random topics concerning programming languages data modeling or
+whatever comes to mind.
+
+Besides my recreational interest in programming, I work as a
+data scientist and did some [more serious
+research](https://scholar.google.com/citations?hl=en&user=iLErbK0AAAAJ)
+applying methods from complex systems science and information theory
+to computational neuroscience, Bayesian data analysis and financial
+markets.

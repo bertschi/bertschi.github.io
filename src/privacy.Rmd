@@ -1,0 +1,33 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+## Privacy statement
+
+Neither this site nor I collect any of your valuable personal data. To
+this end, no cookies are used.
+
+However, this website is brought to you via [Github
+Pages](https://docs.github.com/en/pages/getting-started-with-github-pages/about-github-pages)
+and for security purposes the *visitor's IP address is logged and
+stored by GitHub* as detailed in their [privacy
+statement](https://docs.github.com/en/site-policy/privacy-policies/github-privacy-statement)
+and [privacy
+practices](https://docs.github.com/en/site-policy/privacy-policies/global-privacy-practices).
