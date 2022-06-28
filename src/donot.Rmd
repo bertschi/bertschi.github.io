@@ -1,0 +1,229 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+bibliography: thinkapl.bib
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+# Do or not do?
+
+Monads have become the standard way of modelling effectful
+computations in Haskell. They are well understood and even supported
+at the language level with a special syntax, the *do-notation*. While
+programs written in this notation syntactically resemble imperative
+programs, they unfortunately have a rather different structure than
+usual functional programs.
+
+Recently, applicative functors have gained popularity. They provide a
+more general interface than monads and can model many, but not all,
+effectful computations. Their main advantage is that programs written
+in this style resemble functional programs by relying on function
+composition.
+
+## Functional programming
+
+Functional programming is based on the notion of *pure functions*,
+i.e. the result of a function depends only on its inputs. This means
+in particular, that one can freely replace a value with a function for
+computing this value in any context without changing the semantics of
+a program[^ref]. As an example consider the following program:
+
+[^ref]: This property is also known as referential transparency.
+
+```haskell
+f x y = x + y
+g x   = 2 * x
+
+h x = f (g x) (g x)
+```
+
+or its equivalent version
+
+```haskell
+f x y = x + y
+g x   = 2 * x
+
+h x = let y = g x
+      in f y y
+```
+
+As soon as functions have side-effects, i.e. they do additional stuff
+such as writing to the terminal, this property is lost and it matters
+when and in which order their effects are evaluated. As an example,
+just compare the corresponding program in Common Lisp where now both
+functions `f`, `g` have side effects.
+
+```{marginfigure}
+If Lisp doesn't suite you, feel free to pick Python, Julia, C, Java
+or other language that you like or use.
+```
+
+```lisp
+(defun f (x y)
+  (format t "Calling (f ~a ~a)~%" x y)
+  (+ x y))
+
+(defun g (x)
+  (format t "Calling (g ~a)~%" x)
+  (* 2 x))
+
+(defun h-1 (x)
+  (let ((y (g x)))
+    (f y y)))
+
+(defun h-2 (x)
+  (f (g x) (g x)))
+```
+
+Now, both versions of `h` differ in their handling of side-effects. In
+particular, `(h-1 1)` and `(h-2 1)` will return the same result, but
+exhibit visually distinguishable side-effects, i.e., the first call
+evaluates `g` once and prints
+
+```
+Calling (g 1)
+Calling (f 2 2)
+```
+
+while the latter shows
+
+```
+Calling (g 1)
+Calling (g 1)
+Calling (f 2 2)
+```
+
+evaluating `g` twice.
+
+## And then came *do*
+
+Using the *IO monad* the above programs -- with side-effects -- can be
+written in Haskell as
+
+```haskell
+f x y = do
+  putStrLn $ "Calling f " ++ show x ++ " " ++ show y
+  return $ x + y
+
+g x = do
+  putStrLn $ "Calling g " ++ show x
+  return $ 2 * x
+```
+
+were the *do-notation* was used to stress the sequential nature of
+side-effects. Accordingly, also the two versions of `h` have to be
+changed to accomodate the effects within `f` and `g`.
+
+```haskell
+h x = do
+  y <- g x
+  f y y
+
+h' x = do
+  y  <- g x
+  y' <- g x
+  f y y'
+```
+
+Note that with monadic effects the second version can no longer be
+written as `f (g x) (g x)` as we cannot apply monadic functions.
+
+```{marginfigure}
+At least that's what we have been told ... and indeed, the do--notation
+forces us to rewrite functional code into a rather different structure
+resembling imperative programs.
+```
+
+In this regard, applicative functors have gained popularity. They
+provide a more general interface than monads and can model many, but
+not all, effectful computations. Their main advantage is that programs
+written in this style resemble functional programs by relying on
+function composition. Unfortunately, the side-effects within `f` and
+`g` depend on the function arguments and thus require monads. We can
+see this most easily when desugaring the do--notation: 
+
+```haskell
+hNoDo x = g x >>= \y ->
+          f y y
+
+hNoDo' x = g x >>= \y ->
+           g x >>= \y' ->
+           f y y' 
+```
+
+In the end, this is just continuation passing style[^cps] ... but I
+don't want to be forced writing programs in this way, i.e., explicitly
+chaining all steps. In my opinion the do-notation does little to help
+here, being invasive, ugly and misleading.
+
+[^cps]: In this [blog
+	post](http://blog.sigfpe.com/2008/12/mother-of-all-monads.html}{\url{http://blog.sigfpe.com/2008/12/mother-of-all-monads.html)
+	the continuation monad has been called the *"mother of all
+	monads"*.  Indeed, continuations can be used to represent any
+	monad which illustrates the two aspects underlying monadic
+	effects: First, computations are explicitly chained in
+	continuation-passing style and secondly, only certain effects are
+	allowed in each monad. The second aspect is ensured by the type
+	system which restricts the use of continuations suitable for each
+	particular monad.
+
+## Applicative functors
+
+Let's investigate the difference between the functional and imperative
+style of pure and monadic programs in more detail. In particular, we
+focus on the types in each case and explicitly express function
+application.
+
+**Pure functions**
+
+[^fun]: Arguably function composition could be considered equally
+  fundamental as exemplified in the *pointfree* style.
+
+Function application forms the basis of functional
+programming[^fun]. Let us explicitly define an operator for function
+application[^app]
+
+[^app]: In Haskell the operator `$` plays this role, but has the wrong
+  associativity. In particular, we cannot write `f $ 1 $ 2` to express
+  successive applications `(f 1) 2`. In this sense, `$` is merely a
+  shortcut to remove some brackets, but not a drop-in replacement for
+  function application.
+
+```haskell
+infixl 4 #
+
+(#) :: (a -> b) -> a -> b
+f # x = f x
+```
+
+and explicitly insert it whenever a function is applied, i.e.
+
+```haskell
+f # 1 # 2 -- instead of f 1 2
+```
+
+Note in particular that partial application, i.e. currying, works as
+expected. Indeed, according to the type we have for some function
+`f :: a1 -> ... -> an -> r` and an argument
+`x1 :: a1` that `f # x1 :: a2 -> ... -> an -> r` as
+required.
+
+```{marginfigure}
+This can be seen by instantiating the type variable
+`b` in the type of `(#)` with `a2 -> ... -> an -> r`.
+```
