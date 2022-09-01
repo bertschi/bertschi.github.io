@@ -154,8 +154,9 @@ provide a more general interface than monads and can model many, but
 not all, effectful computations. Their main advantage is that programs
 written in this style resemble functional programs by relying on
 function composition. Unfortunately, the side-effects within `f` and
-`g` depend on the function arguments and thus require monads. We can
-see this most easily when desugaring the do--notation: 
+`g` depend on the function arguments and thus require
+monads. Desugaring the do--notation allows to better understand the
+relation to the functional versions:
 
 ```haskell
 hNoDo x = g x >>= \y ->
@@ -227,3 +228,407 @@ required.
 This can be seen by instantiating the type variable
 `b` in the type of `(#)` with `a2 -> ... -> an -> r`.
 ```
+
+**Applicative functors**
+
+Applicative functors provide a similar functionality. In particular
+the operator `<*>` corresponds to their application. In the following,
+we rename this operator to `<#>` for consistency.
+
+```haskell
+infixl 4 <#>
+
+(<#>) :: Applicative f => f (a -> b) -> f a -> f b
+(<#>) = (<*>)
+```
+
+Compared to standard function application, i.e. `#`, its
+type is slightly different
+
+```haskell
+(#)   ::                (a -> b) -> a -> b
+(<#>) :: Functor f => f (a -> b) -> f a -> f b
+```
+
+and allows applicative effects on all arguments. In particular the
+effect on the function itself is rarely necessary. Accordingly, a
+convenience operator[^fmap] `<$>` is defined
+which simply puts a pure function into the applicative functor and
+then applies it[^alt]
+
+```haskell
+(<$>) :: Functor f => (a -> b) -> f a -> f b
+f <$> x = pure f <#> x
+```
+
+where `pure :: Functor f => a -> f a`.
+
+[^fmap]: The name resembles `$` and suggests that it acts like
+	function application. Yet, it in contrast to \lstinline{<*>} it is
+	asymmetric in its arguments and cannot play the role of general
+	application.
+
+[^alt]: Alternatively, `<$>` can be defined as `f <$> x = fmap f x`.
+
+To understand why we need all arguments of `<#>` to be
+functorial consider the following situation. Suppose we have a
+pure function `g :: a1 -> ... -> an -> b` of $n$ arguments and
+want to partially apply it as `g x1`. Furthermore, the argument
+could potentially require effects, i.e. `x1 :: f a1`.
+Assuming we had an operator, i.e. `<#>` for such an
+application, i.e. we should be able to write something like
+
+```haskell
+g <#> x1 <#> ... <#> xn
+```
+
+Then, what type could `g <#> x1` possible have?
+
+
+* In case of pure arguments, i.e. `x1 :: a1`, we just
+  partially apply `g` and obtain
+  
+  ```haskell
+  g x1 :: a2 -> ... -> an -> r
+  ```
+
+* In case of an effectful argument, i.e. `x1 :: f a1`,
+  we would need to apply the function via `<$>` and would
+  end up with
+  
+  ```haskell
+  g <$> x1 :: f (a2 -> ... -> an -> r)
+  ```
+  
+  Indeed, applying to an effectful argument requires that the effect
+  is visible in the return value as well and therefore we end up with
+  a functorial result type as of the definition of `<$>`.
+
+Thus, successive application requires that the types compose and
+enforces functorial values on all arguments, i.e. `<#>` is
+the proper definition of function application when using applicative
+effects.
+
+**Monadic application**
+
+Most programming languages do not work with pure functions, but
+instead allow different side effects within functions. Thus, from a
+type perspective, functions are actually
+
+```haskell
+f :: Monad m => a1 -> ... -> an -> m r
+```
+for some monad capturing the desired
+effects[^eff]. Furthermore, such effectful functions can be applied to
+arguments which possibly contain additional effects as well.
+
+[^eff]: TODO: Specify most common case of exceptions with assignment
+    and IO which are not undone in case of a non-local exit.
+
+Let's again consider a suitable operator `<<#>>` for function
+application. Then a function `f :: a -> m r`
+of one argument could be applied to an effectful argument as
+
+```haskell
+f <<#>> x1 :: m r
+```
+
+Now, what about a function `f :: a1 -> a1 -> m r`? Here, we would
+need that
+
+```haskell
+f <<#>> x1 <<#>> x2 :: m r
+```
+
+whereas the only possible type for the partial application could be
+
+```haskell
+f <<#>> x1 :: m (a2 -> m r)
+```
+
+Now even if we followed the example of applicative functors and
+considered the application of `return f`
+instead[^return] the types would not
+be symmetric and successive application would not work out
+
+```haskell
+return f <<#>> x1 <<#>> x2 :: Monad m => m r
+return f <<#>> x1          :: Monad m => m (a2 -> m r)
+return f                   :: Monad m => m (a1 -> a2 -> m r)
+```
+
+[^return]: Both `return :: Monad m => a -> m a` and `pure ::
+	Applicative f => a -> f a` inject a value into the monad or
+	applicative functor respectively.
+
+There are several options to make this work
+
+I.  Define different application operators suitable for functions
+	with different number of arguments, i.e.
+
+    ```haskell
+    appM1 :: Monad m => m (a1 -> m r) -> m a1 -> m r
+    appM1 mf mx = mf >>= \f ->
+                  mx >>= \x ->
+                  f x
+
+
+    appM2 :: Monad m => m (a1 -> a2 -> m r) -> m a1 -> m (a2 -> m r)
+    appM2 mf mx = mf >>= \f ->
+                  mx >>= \x ->
+                  return (\y -> f x y)
+    ```
+
+    While this approach works, partial application is no longer
+    automatic, i.e. we need to track the number of remaining arguments explicitly
+
+    ```haskell
+    *Main> return f `appM2` (putStrLn "Argument 1" >> return 1) `appM1` return 2
+    Argument 1
+    Calling f 1 2
+    3
+    ```
+   
+II. Alternatively, we could just use the definitions for applicative
+	functors and require the user to explicitly `join` the final
+	result as it would be of type `m m r` then
+	
+	 ```haskell
+	 *Main> join (return f <#> (putStrLn "Argument 1" >> return 1) <#> return 2)
+	 Argument 1
+	 Calling f 1 2
+	 3
+	 ```
+   
+     Again, the caller would be required to track how many function arguments 
+	 have been provided in order to act accordingly when all arguments have been used up.
+   
+III. Finally, we define
+
+	 ```haskell
+     infixl 4 <<#>>
+
+     (<<#>>) :: Monad m => m (a -> m b) -> m a -> m b
+     mf <<#>> mx = mf >>= \f ->
+                   mx >>= \x ->
+                   f x
+     ```
+	
+	 together with several functions[^spice]
+	
+	 ```haskell
+     spice1 :: Monad m => (a1 -> m r) -> m (a1 -> m r)
+     spice1 f = return f
+
+     spice2 :: Monad m => (a1 -> a2 -> m r) -> m (a1 -> m (a2 -> m r))
+     spice2 f = return (\x1 -> spice1 (f x1))
+
+     spice3 :: Monad m => (a1 -> a2 -> a3 -> m r) -> m (a1 -> m (a2 -> m (a3 -> m r)))
+     spice3 f = return (\x1 -> spice2 (f x1))
+     ```
+	
+	 and voila successive application works as desired
+
+	 ```haskell
+	 *Main> spice2 f <<#>> (putStrLn "Argument 1" >> return 1) <<#>> return 2
+	 Argument 1
+	 Calling f 1 2
+	 3
+	 ```
+
+[^spice]: The name `spice` refers to the ability of these functions to
+	"currify" their arguments.
+
+The last approach seems more convenient to me, moving the burden of
+knowing the number of function arguments from the call side closer to
+its definition. Thus, we will use it below and illustrate several
+examples of monadic programming in this style.
+
+## Apply your monads
+
+With the above definitions, the second version of the simple example
+can be written as
+
+```haskell
+h'' x = spice2 f <<#>> g x <<#>> g x
+```
+
+which resembles the original pure version. Yet, it handles effects
+within nested function calls as expected. Furthermore, it is still
+referentially transparent and in particular equivalent to
+
+```haskell
+h''' x = let y = g x
+         in spice2 f <<#>> y <<#>> y
+```
+
+Thus, comparing with the definition `h'` above, we see that `do`
+resembles a `let` in standard programming languages, i.e. it executes
+an expressions effect and binds the variable to its value (without its
+effect).
+
+Monads are sometimes called the _programmable semicolon_. This
+suggests that imperative statements are sequenced in this
+fashion. Yet, in Haskell -- a purely functional language -- there is
+no such thing as an imperative statement.  Especially, the
+do--notation suggests the misleading interpretation that `x <-` acts
+like an assignment operation. It does not, as the following example
+using nested do--blocks illustrates:
+
+```haskell
+statement = do
+  x <- g 1
+  putStrLn ("Before: " ++ show x)
+  do
+    x <- g 2
+    putStrLn ("Inner: " ++ show x)
+  putStrLn ("After: " ++ show x)
+```
+
+Instead it acts like a `let` statement as in
+e.g. Common Lisp[^let]
+
+[^let]: Or rather `let*` for the Lisp experts.
+
+```lisp
+(defun statement-let ()
+  (let ((x (g 1)))
+    (format t "Before: ~d~%" x)
+    (let ((x (g 2)))
+      (format t "Inner: ~d~%" x))
+    (format t "After: ~d~%" x)))
+```
+
+and not like an assignment[^assign]:
+
+```lisp
+(defun statement-assign ()
+  (let (x)
+	(setf x (g 1))
+    (format t "Before: ~d~%" x)
+    (progn
+      (setf x (g 2))
+      (format t "Inner: ~d~%" x))
+    (format t "After: ~d~%" x)))
+```
+
+[^assign]: The reader might also want to try a corresponding example
+	in Java, Python etc.
+
+*Some examples*
+
+To further illustrate the nature of the new operators, we consider the
+do--notation in yet more detail. In the most basic case
+
+```haskell
+do
+  x1 <- act1
+  x2 <- act2
+  -- ...
+  actN
+```
+
+desugars as
+
+```haskell
+act1 >>= \x1 ->
+do
+  x2 <- act2
+  -- ...
+  actN  
+```
+
+or -- using the more applicative operators -- as
+
+```haskell
+spice1 (\x1 -> do
+                 x2 <- act2
+                   -- ...
+                   actN)
+<<#>> act1
+```
+
+This again illustrates the similarity to (non-recursive)
+`let` expressions
+
+```haskell
+let x1 = expr1
+    x2 = expr2
+in expr
+```
+
+which could be desugared as
+
+```haskell
+(\x1 -> let x2 = expr2
+        in expr)
+# expr1
+```
+
+where the function application has been marked with `#`
+explicitly. Furthermore, the desugared version illustrates again that
+the do--notation is continuation--passing style in disguise, i.e. an
+explicit continuation is constructed and immediately applied.
+
+As a slightly larger example, consider a program which calls several
+nested functions, i.e.
+
+```haskell
+c :: Int
+c      = 1
+f1 :: Int -> Int
+f1 x   = c * x
+f2 :: Int -> Int -> Int
+f2 x y = x + f1 y
+prog :: Int
+prog = f2 (f1 c) c
+```
+
+Now, suppose that the constant `c` is to be replaced with random numbers,
+i.e. we would want to define a random function which can be used
+instead
+
+```haskell
+r :: R.MonadRandom m => m Int
+r = R.fromList [(1, 0.1), (2, 0.2), (3, 0.3), (4, 0.4)]
+f1' :: (Applicative m, R.MonadRandom m) => Int -> m Int
+f1' x = pure (*) <#> r <#> pure x
+f2' :: (Applicative m, R.MonadRandom m) => Int -> Int -> m Int
+f2' x y = pure (+) <#> pure x <#> (spice1 f1' <<#>> return y)
+prog' :: (Applicative m, R.MonadRandom m) => m Int
+prog' = spice2 f2' <<#>> (spice1 f1' <<#>> r) <<#>> r
+```
+
+Instead of the larger change required in the translation into the
+do--notation[^youdo], i.e. naming all intermediate
+results and sequencing, we mechanically replaced each function
+application. Either using the operator `<#>` when applying
+pure functions or the operator `<<#>>` when applying monadic
+functions. In turn, further simplifications would be possible,
+e.g. `f1' y` instead of `spice1 f1' <<#>> return y`.
+
+[^youdo]: Try this at home!
+
+In the end, monads allow precise control over side-effects. In
+particular, the type system ensures that only the desired effects are
+possible. In turn, function application needs to be explicitly
+distinguish between three cases captured by different operators:
+
+
+1. `#`: A pure function is applied to pure arguments. No effects are executed.
+
+2. `<#>`: A pure function is applied to effectful arguments. Effects
+   are executed from left to right.
+
+3. `<<#>>`: An effectful function is applied to effectful
+   arguments. Its effects are executed after the arguments' effects.
+
+Most programming language only provide the last version, i.e. all
+functions can implicitly contain effects in the single monad that is
+provided by the language designer. Haskell allows much more
+flexibility in this regard and especially when *applying our
+effects/monads* we can indeed claim:
+
+> In short, Haskell is the world’s finest imperative programming language.
+
+> `r tufte::quote_footer("Simon Peyton Jones")`
