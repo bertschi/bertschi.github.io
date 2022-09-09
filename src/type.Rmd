@@ -1,0 +1,49 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+bibliography: thinkapl.bib
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+# What's in a type?
+
+Many facets of types
+
+*Mental model*
+
+Type as set of possible values:
+
+* most general, but not always applicable, i.e., classes
+
+* natural laws, i.e., subtyping and Liskov substitution principle
+
+## Other uses of types
+
+*Physical* representation of data in memory, i.e., concrete types.
+
+*Logical* properties, i.e., supported operations. Abstractions for generic programming.
+
+*Type theory*: Syntactic tag, i.e., restricting range of syntactically
+valid programs. Ideally, such programs will run without errors.
+
+[nominal/structural](https://lexi-lambda.github.io/blog/2020/01/19/no-dynamic-type-systems-are-not-inherently-more-open/)
+
+*Domain thinking*: Types for documentation and static correctness, i.e., `Email` or [safe strings](https://blog.moertel.com/posts/2006-10-18-a-type-based-solution-to-the-strings-problem.html)
+
+*Missing types*: Shape in tensor computations or dimensions/units in
+physical simulations.
