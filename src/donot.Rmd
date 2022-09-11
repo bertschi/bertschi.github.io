@@ -143,22 +143,16 @@ h' x = do
   f y y'
 ```
 
-Note that with monadic effects the second version can no longer be
-written as `f (g x) (g x)` as we cannot apply monadic functions.
-
 ```{marginfigure}
 At least that's what we have been told ... and indeed, the do--notation
 forces us to rewrite functional code into a rather different structure
 resembling imperative programs.
 ```
 
-In this regard, applicative functors have gained popularity which
-admit a more applicative style of programming. Yet, they only provide
-a weaker, i.e., more general, abstraction than monads and
-unfortunately, the side-effects within `f` and `g` -- which depend on
-their function arguments -- cannot be modeled in this fashion and
-require monads. In any case, desugaring the do--notation allows to
-better understand the relation to the functional versions:
+Note that with monadic effects the second version can no longer be
+written as `f (g x) (g x)` as we cannot apply monadic functions.
+Desugaring the do--notation allows to better understand the relation
+to the functional versions:
 
 ```haskell
 hNoDo x = g x >>= \y ->
@@ -169,7 +163,7 @@ hNoDo' x = g x >>= \y ->
            f y y' 
 ```
 
-In the end, this is just continuation passing style[^cps] ... but I
+In the end, this is just continuation passing style[^cps] (CPS) ... but I
 don't want to be forced writing programs in this way, i.e., explicitly
 chaining all steps. In my opinion the do-notation does little to help
 here, being invasive, ugly and misleading.
@@ -184,6 +178,25 @@ here, being invasive, ugly and misleading.
 	allowed in each monad. The second aspect is ensured by the type
 	system which restricts the use of continuations suitable for each
 	particular monad.
+
+*Interlude*
+
+Compared to CPS the do-notation does offer some improvements and a
+similar notation has indeed been used in [On
+Lisp](http://paulgraham.com/onlisp.html) by Paul Graham for
+implementing continuations in Common Lisp. Interestingly, their use
+has to obey certain restrictions (Box 20.5) which are akin to the
+rules of when the do-notation can be used -- the main difference being
+that the type system of Haskell enforces proper use.  Still
+programming in the do-notation looks and feels rather different than
+functional programming.
+
+In this regard, applicative functors have gained popularity which
+admit a more applicative style of programming. Yet, they only provide
+a weaker, i.e., more general, abstraction than monads and
+unfortunately, the side-effects within `f` and `g` -- which depend on
+their function arguments -- cannot be modeled in this fashion and
+require monads. 
 
 ## Applicative functors
 
@@ -288,9 +301,7 @@ g <#> x1 <#> ... <#> xn
 Note that this is just a suggestive hypothetical notation and does not have the correct types yet.
 ```
 
-
 Then, what type could `g <#> x1` possible have?
-
 
 * In case of pure arguments, i.e. `x1 :: a1`, we just
   partially apply `g` and obtain
@@ -320,7 +331,9 @@ effects.
 
 Most programming languages do not work with pure functions, but
 instead allow different side effects within functions. Thus, from a
-type perspective, functions are actually
+type perspective, functions are actually[^callval]
+
+[^callval]: Assuming call-by-value semantics for the arguments.
 
 ```haskell
 f :: Monad m => a1 -> ... -> an -> m r
@@ -361,18 +374,20 @@ f <<#>> x1 :: m (a2 -> m r)
 
 Now even if we followed the example of applicative functors and
 considered the application of `return f`
-instead[^return] the types would not
+instead the types would not
 be symmetric and successive application would not work out
+
+```{marginfigure}
+Both `return :: Monad m => a -> m a` and `pure ::
+Applicative f => a -> f a` inject a value into the monad or
+applicative functor respectively.
+```
 
 ```haskell
 return f <<#>> x1 <<#>> x2 :: Monad m => m r
 return f <<#>> x1          :: Monad m => m (a2 -> m r)
 return f                   :: Monad m => m (a1 -> a2 -> m r)
 ```
-
-[^return]: Both `return :: Monad m => a -> m a` and `pure ::
-	Applicative f => a -> f a` inject a value into the monad or
-	applicative functor respectively.
 
 There are several options to make this work
 
@@ -403,11 +418,13 @@ I.  Define different application operators suitable for functions
     ```
    
 II. Alternatively, we could just use the definitions for applicative
-	functors and require the user to explicitly `join`[^join] the final
+	functors and require the user to explicitly `join` the final
 	result as it would be of type `m (m r)` then
 	
-	[^join]: `join :: Monad m => m (m r) -> m r` can be defined for every monad via
-		`join mmx = mmx >>= id`.
+	```{marginfigure}
+	`join :: Monad m => m (m r) -> m r` can be defined for every monad via
+    `join mmx = mmx >>= id`.
+	```
 	
 	 ```haskell
 	 *Main> join (return f <#> (putStrLn "Argument 1" >> return 1) <#> return 2)
@@ -540,7 +557,7 @@ and not like an assignment[^assign]:
 [^assign]: The reader might also want to try a corresponding example
 	in Java, Python etc.
 
-*Some examples*
+*Further examples*
 
 To further illustrate the nature of the new operators, we consider the
 do--notation in yet more detail. In the most basic case
