@@ -297,23 +297,470 @@ be</em></h4>
 
 
 <p><label for="tufte-mn-1" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-1" class="margin-toggle"><span class="marginnote"><span style="display: block;"><a href="index.html">Blog home</a></span> <span style="display: block;"><a href="about.html">About me</a></span> <span style="display: block;"><a href="privacy.html">Privacy</a></span></span></p>
-<hr />
-<div id="thinking-in-code" class="section level1">
-<h1>Thinking in code</h1>
-<div id="jun-9-2022" class="section level2">
-<h2>Jun 9, 2022</h2>
-<p>An opiniated piece on the “two-language problem” in machine learning
-and my first adventures in APL/J.</p>
-<p><a href="thinkapl.html">Yes please, take me there</a></p>
-<hr />
+<div id="do-or-not-do" class="section level1">
+<h1>Do or not do?</h1>
+<p>Monads have become the standard way of modelling effectful
+computations in Haskell. They are well understood and even supported at
+the language level with a special syntax, the <em>do-notation</em>.
+While programs written in this notation syntactically resemble
+imperative programs, they unfortunately have a rather different
+structure than usual functional programs.</p>
+<p>Recently, applicative functors have gained popularity. In short, they
+provide a weaker and thus more general interface than monads and can
+model many, but not all, effectful computations. Their main advantage is
+that programs written in this style resemble functional programs by
+relying on function application.</p>
+<p>In the following, I will illustrate that monads can actually be
+applied in a similar fashion.</p>
+<div id="functional-programming" class="section level2">
+<h2>Functional programming</h2>
+<p>Functional programming is based on the notion of <em>pure
+functions</em>, i.e. the result of a function depends only on its
+inputs. This means in particular, that one can freely replace a value
+with a function for computing this value in any context without changing
+the semantics of a program<label for="tufte-sn-1" class="margin-toggle sidenote-number">1</label><input type="checkbox" id="tufte-sn-1" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">1</span> This property is also known as referential
+transparency.</span>. As an example consider the following
+program:</p>
+<pre class="haskell"><code>f x y = x + y
+g x   = 2 * x
+
+h x = f (g x) (g x)</code></pre>
+<p>or its equivalent version</p>
+<pre class="haskell"><code>f x y = x + y
+g x   = 2 * x
+
+h x = let y = g x
+      in f y y</code></pre>
+<p>As soon as functions have side-effects, i.e. they do additional stuff
+such as writing to the terminal, this property is lost and it matters
+when and in which order their effects are evaluated. As an example, just
+compare the corresponding program in Common Lisp where now both
+functions <code>f</code>, <code>g</code> have side effects.</p>
+<p><label for="tufte-mn-2" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-2" class="margin-toggle"><span class="marginnote"><span style="display: block;">If Lisp doesn’t suite
+you, feel free to pick Python, Julia, C, Java or other language that you
+like or use.</span></span></p>
+<pre class="lisp"><code>(defun f (x y)
+  (format t &quot;Calling (f ~a ~a)~%&quot; x y)
+  (+ x y))
+
+(defun g (x)
+  (format t &quot;Calling (g ~a)~%&quot; x)
+  (* 2 x))
+
+(defun h-1 (x)
+  (let ((y (g x)))
+    (f y y)))
+
+(defun h-2 (x)
+  (f (g x) (g x)))</code></pre>
+<p>Now, both versions of <code>h</code> differ in their handling of
+side-effects. In particular, <code>(h-1 1)</code> and
+<code>(h-2 1)</code> will return the same result, but exhibit visually
+distinguishable side-effects, i.e., the first call evaluates
+<code>g</code> once and prints</p>
+<pre><code>Calling (g 1)
+Calling (f 2 2)</code></pre>
+<p>while the latter shows</p>
+<pre><code>Calling (g 1)
+Calling (g 1)
+Calling (f 2 2)</code></pre>
+<p>evaluating <code>g</code> twice.</p>
 </div>
-<div id="sep-11-2022" class="section level2">
-<h2>Sep 11, 2022</h2>
-<p>Thoughts on the do-notation in Haskell and why I don’t like it. As an
-alternative, some new combinators are proposed which admit an
-applicative style of programming with monads.</p>
-<p><a href="donot.html">Read along and see yourself</a></p>
-<hr />
+<div id="and-then-came-do" class="section level2">
+<h2>And then came <em>do</em></h2>
+<p>Using the <em>IO monad</em> the above programs – with side-effects –
+can be written in Haskell as</p>
+<pre class="haskell"><code>f x y = do
+  putStrLn $ &quot;Calling f &quot; ++ show x ++ &quot; &quot; ++ show y
+  return $ x + y
+
+g x = do
+  putStrLn $ &quot;Calling g &quot; ++ show x
+  return $ 2 * x</code></pre>
+<p>were the <em>do-notation</em> was used to stress the sequential
+nature of side-effects. Accordingly, also the two versions of
+<code>h</code> have to be changed to accomodate the effects within
+<code>f</code> and <code>g</code>.</p>
+<pre class="haskell"><code>h x = do
+  y &lt;- g x
+  f y y
+
+h&#39; x = do
+  y  &lt;- g x
+  y&#39; &lt;- g x
+  f y y&#39;</code></pre>
+<p><label for="tufte-mn-3" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-3" class="margin-toggle"><span class="marginnote"><span style="display: block;">At least that’s what we
+have been told … and indeed, the do–notation forces us to rewrite
+functional code into a rather different structure resembling imperative
+programs.</span></span></p>
+<p>Note that with monadic effects the second version can no longer be
+written as <code>f (g x) (g x)</code> as we cannot apply monadic
+functions. Desugaring the do–notation allows to better understand the
+relation to the functional versions:</p>
+<pre class="haskell"><code>hNoDo x = g x &gt;&gt;= \y -&gt;
+          f y y
+
+hNoDo&#39; x = g x &gt;&gt;= \y -&gt;
+           g x &gt;&gt;= \y&#39; -&gt;
+           f y y&#39; </code></pre>
+<p>In the end, this is just continuation passing style<label for="tufte-sn-2" class="margin-toggle sidenote-number">2</label><input type="checkbox" id="tufte-sn-2" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">2</span> In this <a href="http://blog.sigfpe.com/2008/12/mother-of-all-monads.html">blog
+post</a> the continuation monad has been called the <em>“mother of all
+monads”</em>. Indeed, continuations can be used to represent any monad
+which illustrates the two aspects underlying monadic effects: First,
+computations are explicitly chained in continuation-passing style and
+secondly, only certain effects are allowed in each monad. The second
+aspect is ensured by the type system which restricts the use of
+continuations suitable for each particular monad.</span> (CPS) … but I don’t
+want to be forced writing programs in this way, i.e., explicitly
+chaining all steps. In my opinion the do-notation does little to help
+here, being invasive, ugly and misleading.</p>
+<p><em>Interlude</em></p>
+<p>Compared to CPS the do-notation does offer some improvements and a
+similar notation has indeed been used in <a href="http://paulgraham.com/onlisp.html">On Lisp</a> by Paul Graham for
+implementing continuations in Common Lisp. Interestingly, their use has
+to obey certain restrictions (Box 20.5) which are akin to the rules of
+when the do-notation can be used – the main difference being that the
+type system of Haskell enforces proper use. Still programming in the
+do-notation looks and feels rather different than functional
+programming.</p>
+<p>In this regard, applicative functors have gained popularity which
+admit a more applicative style of programming. Yet, they only provide a
+weaker, i.e., more general, abstraction than monads and unfortunately,
+the side-effects within <code>f</code> and <code>g</code> – which depend
+on their function arguments – cannot be modeled in this fashion and
+require monads.</p>
+</div>
+<div id="applicative-functors" class="section level2">
+<h2>Applicative functors</h2>
+<p>Let’s investigate the difference between the functional and
+imperative style of pure and monadic programs in more detail. In
+particular, we focus on the types in each case and explicitly express
+function application.</p>
+<p><strong>Pure functions</strong></p>
+<p>Function application forms the basis of functional programming<label for="tufte-sn-3" class="margin-toggle sidenote-number">3</label><input type="checkbox" id="tufte-sn-3" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">3</span> Arguably function composition could be considered
+equally fundamental as exemplified in the <em>pointfree</em> style.</span>. Let us
+explicitly define an operator for function application<label for="tufte-sn-4" class="margin-toggle sidenote-number">4</label><input type="checkbox" id="tufte-sn-4" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">4</span> In Haskell the operator <code>$</code> plays this role,
+but has the wrong associativity. In particular, we cannot write
+<code>f $ 1 $ 2</code> to express successive applications
+<code>(f 1) 2</code>. In this sense, <code>$</code> is merely a shortcut
+to remove some brackets, but not a drop-in replacement for function
+application.</span></p>
+<pre class="haskell"><code>infixl 4 #
+
+(#) :: (a -&gt; b) -&gt; a -&gt; b
+f # x = f x</code></pre>
+<p>and explicitly insert it whenever a function is applied, i.e.</p>
+<pre class="haskell"><code>f # 1 # 2 -- instead of f 1 2</code></pre>
+<p>Note in particular that partial application, i.e. currying, works as
+expected. Indeed, according to the type we have for some function
+<code>f :: a1 -&gt; ... -&gt; an -&gt; r</code> and an argument
+<code>x1 :: a1</code> that
+<code>f # x1 :: a2 -&gt; ... -&gt; an -&gt; r</code> as required.</p>
+<p><label for="tufte-mn-4" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-4" class="margin-toggle"><span class="marginnote"><span style="display: block;">This can be seen by
+instantiating the type variable <code>b</code> in the type of
+<code>(#)</code> with <code>a2 -&gt; … -&gt; an -&gt;
+r</code>.</span></span></p>
+<p><strong>Applicative functors</strong></p>
+<p>Applicative functors provide a similar functionality. In particular
+the operator <code>&lt;*&gt;</code> corresponds to their application. In
+the following, we rename this operator to <code>&lt;#&gt;</code> for
+consistency.</p>
+<pre class="haskell"><code>infixl 4 &lt;#&gt;
+
+(&lt;#&gt;) :: Applicative f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b
+(&lt;#&gt;) = (&lt;*&gt;)</code></pre>
+<p>Compared to standard function application, i.e. <code>#</code>, its
+type is slightly different</p>
+<pre class="haskell"><code>(#)   ::                (a -&gt; b) -&gt; a -&gt; b
+(&lt;#&gt;) :: Functor f =&gt; f (a -&gt; b) -&gt; f a -&gt; f b</code></pre>
+<p>and allows applicative effects on all arguments. In particular the
+effect on the function itself is rarely necessary. Accordingly, a
+convenience operator<label for="tufte-sn-5" class="margin-toggle sidenote-number">5</label><input type="checkbox" id="tufte-sn-5" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">5</span> The name resembles <code>$</code> and suggests that it
+acts like function application. Yet, in contrast to
+<code>&lt;*&gt;</code> it is asymmetric in its arguments and cannot play
+the role of general application.</span> <code>&lt;$&gt;</code> is defined which
+simply puts a pure function into the applicative functor and then
+applies it<label for="tufte-sn-6" class="margin-toggle sidenote-number">6</label><input type="checkbox" id="tufte-sn-6" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">6</span> Alternatively, <code>&lt;$&gt;</code> can be defined as
+<code>f &lt;$&gt; x = fmap f x</code>.</span></p>
+<pre class="haskell"><code>(&lt;$&gt;) :: Functor f =&gt; (a -&gt; b) -&gt; f a -&gt; f b
+f &lt;$&gt; x = pure f &lt;#&gt; x</code></pre>
+<p>where <code>pure :: Functor f =&gt; a -&gt; f a</code>.</p>
+<p>To understand why we need all arguments of <code>&lt;#&gt;</code> to
+be functorial consider the following situation. Suppose we have a pure
+function <code>g :: a1 -&gt; ... -&gt; an -&gt; b</code> of <span class="math inline">\(n\)</span> arguments and want to partially apply
+it as <code>g x1</code>. Furthermore, the argument could potentially
+require effects, i.e. <code>x1 :: f a1</code>. Assuming we had an
+operator, i.e. <code>&lt;#&gt;</code> for such an application, i.e. we
+should be able to write something like</p>
+<pre class="haskell"><code>g &lt;#&gt; x1 &lt;#&gt; ... &lt;#&gt; xn</code></pre>
+<p><label for="tufte-mn-5" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-5" class="margin-toggle"><span class="marginnote"><span style="display: block;">Note that this is just
+a suggestive hypothetical notation and does not have the correct types
+yet.</span></span></p>
+<p>Then, what type could <code>g &lt;#&gt; x1</code> possible have?</p>
+<ul>
+<li><p>In case of pure arguments, i.e. <code>x1 :: a1</code>, we just
+partially apply <code>g</code> and obtain</p>
+<pre class="haskell"><code>g x1 :: a2 -&gt; ... -&gt; an -&gt; r</code></pre></li>
+<li><p>In case of an effectful argument, i.e. <code>x1 :: f a1</code>,
+we would need to apply the function via <code>&lt;$&gt;</code> and would
+end up with</p>
+<pre class="haskell"><code>g &lt;$&gt; x1 :: f (a2 -&gt; ... -&gt; an -&gt; r)</code></pre>
+<p>Indeed, applying to an effectful argument requires that the effect is
+visible in the return value as well and therefore we end up with a
+functorial result type as of the definition of
+<code>&lt;$&gt;</code>.</p></li>
+</ul>
+<p>Thus, by symmetry, successive application requires that the types
+compose and enforces functorial values on all arguments,
+i.e. <code>&lt;#&gt;</code> is the proper definition of function
+application when using applicative effects.</p>
+<p><strong>Monadic application</strong></p>
+<p>Most programming languages do not work with pure functions, but
+instead allow different side effects within functions. Thus, from a type
+perspective, functions are actually<label for="tufte-sn-7" class="margin-toggle sidenote-number">7</label><input type="checkbox" id="tufte-sn-7" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">7</span> Assuming call-by-value semantics for the arguments.</span></p>
+<pre class="haskell"><code>f :: Monad m =&gt; a1 -&gt; ... -&gt; an -&gt; m r</code></pre>
+<p>for some monad capturing the desired effects<label for="tufte-sn-8" class="margin-toggle sidenote-number">8</label><input type="checkbox" id="tufte-sn-8" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">8</span> Which effects are available here is fixed by the
+language designer and usually includes mutable state, IO and exceptions.
+Furthermore, effects such as IO are usually not undone in case of
+non-local transfer of control, i.e., when raising exceptions.</span>. Furthermore, such
+effectful functions can be applied to arguments which possibly contain
+additional effects as well.</p>
+<p>Let’s again consider a suitable operator
+<code>&lt;&lt;#&gt;&gt;</code> for function application. Then a function
+<code>f :: a -&gt; m r</code> of one argument could be applied to an
+effectful argument as</p>
+<pre class="haskell"><code>f &lt;&lt;#&gt;&gt; x1 :: m r</code></pre>
+<p>Now, what about a function <code>f :: a1 -&gt; a1 -&gt; m r</code>?
+Here, we would need that</p>
+<pre class="haskell"><code>f &lt;&lt;#&gt;&gt; x1 &lt;&lt;#&gt;&gt; x2 :: m r</code></pre>
+<p>whereas the only possible type for the partial application could be<label for="tufte-sn-9" class="margin-toggle sidenote-number">9</label><input type="checkbox" id="tufte-sn-9" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">9</span> Retaining the effect from the first argument around the
+function – as in applicatives – and still allowing for an effect in the
+return value – from the monadic function.</span></p>
+<pre class="haskell"><code>f &lt;&lt;#&gt;&gt; x1 :: m (a2 -&gt; m r)</code></pre>
+<p>Now even if we followed the example of applicative functors and
+considered the application of <code>return f</code> instead the types
+would not be symmetric and successive application would not work out</p>
+<p><label for="tufte-mn-6" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-6" class="margin-toggle"><span class="marginnote"><span style="display: block;">Both <code>return ::
+Monad m =&gt; a -&gt; m a</code> and <code>pure :: Applicative f =&gt; a
+-&gt; f a</code> inject a value into the monad or applicative functor
+respectively.</span></span></p>
+<pre class="haskell"><code>return f &lt;&lt;#&gt;&gt; x1 &lt;&lt;#&gt;&gt; x2 :: Monad m =&gt; m r
+return f &lt;&lt;#&gt;&gt; x1          :: Monad m =&gt; m (a2 -&gt; m r)
+return f                   :: Monad m =&gt; m (a1 -&gt; a2 -&gt; m r)</code></pre>
+<p>There are several options to make this work</p>
+<ol style="list-style-type: upper-roman">
+<li><p>Define different application operators suitable for functions
+with different number of arguments, i.e.</p>
+<pre class="haskell"><code>appM1 :: Monad m =&gt; m (a1 -&gt; m r) -&gt; m a1 -&gt; m r
+appM1 mf mx = mf &gt;&gt;= \f -&gt;
+              mx &gt;&gt;= \x -&gt;
+              f x
+
+
+appM2 :: Monad m =&gt; m (a1 -&gt; a2 -&gt; m r) -&gt; m a1 -&gt; m (a2 -&gt; m r)
+appM2 mf mx = mf &gt;&gt;= \f -&gt;
+              mx &gt;&gt;= \x -&gt;
+              return (\y -&gt; f x y)</code></pre>
+<p>While this approach works, partial application is no longer
+automatic, i.e. we need to track the number of remaining arguments
+explicitly</p>
+<pre class="haskell"><code>*Main&gt; return f `appM2` (putStrLn &quot;Argument 1&quot; &gt;&gt; return 1) `appM1` return 2
+Argument 1
+Calling f 1 2
+3</code></pre></li>
+<li><p>Alternatively, we could just use the definitions for applicative
+functors and require the user to explicitly <code>join</code> the final
+result as it would be of type <code>m (m r)</code> then</p>
+<p><label for="tufte-mn-7" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-7" class="margin-toggle"><span class="marginnote"><span style="display: block;"><code>join :: Monad m
+=&gt; m (m r) -&gt; m r</code> can be defined for every monad via
+<code>join mmx = mmx &gt;&gt;= id</code>.</span></span></p>
+<pre class="haskell"><code>*Main&gt; join (return f &lt;#&gt; (putStrLn &quot;Argument 1&quot; &gt;&gt; return 1) &lt;#&gt; return 2)
+Argument 1
+Calling f 1 2
+3</code></pre>
+<p>Again, the caller would be required to track how many function
+arguments have been provided in order to act accordingly when all
+arguments have been used up.</p></li>
+<li><p>Finally, we could define</p>
+<pre class="haskell"><code>infixl 4 &lt;&lt;#&gt;&gt;
+
+(&lt;&lt;#&gt;&gt;) :: Monad m =&gt; m (a -&gt; m b) -&gt; m a -&gt; m b
+mf &lt;&lt;#&gt;&gt; mx = mf &gt;&gt;= \f -&gt;
+              mx &gt;&gt;= \x -&gt;
+              f x</code></pre>
+<p>together with several functions<label for="tufte-sn-10" class="margin-toggle sidenote-number">10</label><input type="checkbox" id="tufte-sn-10" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">10</span> The name <code>spice</code> refers to the ability of
+these functions to “currify” their arguments.</span></p>
+<pre class="haskell"><code>spice1 :: Monad m =&gt; (a1 -&gt; m r) -&gt; m (a1 -&gt; m r)
+spice1 f = return f
+
+spice2 :: Monad m =&gt; (a1 -&gt; a2 -&gt; m r) -&gt; m (a1 -&gt; m (a2 -&gt; m r))
+spice2 f = return (\x1 -&gt; spice1 (f x1))
+
+spice3 :: Monad m =&gt; (a1 -&gt; a2 -&gt; a3 -&gt; m r) -&gt; m (a1 -&gt; m (a2 -&gt; m (a3 -&gt; m r)))
+spice3 f = return (\x1 -&gt; spice2 (f x1))</code></pre>
+<p>and voila successive application works as desired</p>
+<pre class="haskell"><code>*Main&gt; spice2 f &lt;&lt;#&gt;&gt; (putStrLn &quot;Argument 1&quot; &gt;&gt; return 1) &lt;&lt;#&gt;&gt; return 2
+Argument 1
+Calling f 1 2
+3</code></pre></li>
+</ol>
+<p>The last approach seems more convenient to me, moving the burden of
+knowing the number of function arguments from the call side closer to
+its definition. Thus, we will use it below and investigate some examples
+of monadic programming in this style.</p>
+</div>
+<div id="apply-your-monads" class="section level2">
+<h2>Apply your monads</h2>
+<p>With the above definitions, the second version of the simple example
+can be written as</p>
+<pre class="haskell"><code>h&#39;&#39; x = spice2 f &lt;&lt;#&gt;&gt; g x &lt;&lt;#&gt;&gt; g x</code></pre>
+<p>which resembles the original pure version. Yet, it handles effects
+within nested function calls as expected. Furthermore, it is still
+referentially transparent and in particular equivalent to</p>
+<pre class="haskell"><code>h&#39;&#39;&#39; x = let y = g x
+         in spice2 f &lt;&lt;#&gt;&gt; y &lt;&lt;#&gt;&gt; y</code></pre>
+<p>which also executes the effect of <code>g x</code> twice.</p>
+<p>Thus, comparing with the definition</p>
+<pre class="haskell"><code>h x = do
+  y &lt;- g x
+  f y y</code></pre>
+<p>from above, we see that <code>do</code> resembles a <code>let</code>
+in standard programming languages, i.e. it executes an expressions
+effect and binds the variable to its value (without its effect).</p>
+<p>Monads are sometimes called the <em>programmable semicolon</em>. This
+suggests that imperative statements are sequenced in this fashion. Yet,
+in Haskell – a purely functional language – there is no such thing as an
+imperative statement. Especially, the do–notation suggests the
+misleading interpretation that <code>x &lt;-</code> acts like an
+assignment operation. It does not, as the following example using nested
+do–blocks illustrates:</p>
+<pre class="haskell"><code>statement = do
+  x &lt;- g 1
+  putStrLn (&quot;Before: &quot; ++ show x)
+  do
+    x &lt;- g 2
+    putStrLn (&quot;Inner: &quot; ++ show x)
+  putStrLn (&quot;After: &quot; ++ show x)</code></pre>
+<p>Instead it acts like a <code>let</code> statement as in e.g. Common
+Lisp<label for="tufte-sn-11" class="margin-toggle sidenote-number">11</label><input type="checkbox" id="tufte-sn-11" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">11</span> Or rather <code>let*</code> for the Lisp experts.</span></p>
+<pre class="lisp"><code>(defun statement-let ()
+  (let ((x (g 1)))
+    (format t &quot;Before: ~d~%&quot; x)
+    (let ((x (g 2)))
+      (format t &quot;Inner: ~d~%&quot; x))
+    (format t &quot;After: ~d~%&quot; x)))</code></pre>
+<p>and not like an assignment<label for="tufte-sn-12" class="margin-toggle sidenote-number">12</label><input type="checkbox" id="tufte-sn-12" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">12</span> The reader might also want to try a corresponding
+example in Java, Python etc.</span>:</p>
+<pre class="lisp"><code>(defun statement-assign ()
+  (let (x)
+    (setf x (g 1))
+    (format t &quot;Before: ~d~%&quot; x)
+    (progn
+      (setf x (g 2))
+      (format t &quot;Inner: ~d~%&quot; x))
+    (format t &quot;After: ~d~%&quot; x)))</code></pre>
+<p><em>Further examples</em></p>
+<p>To further illustrate the nature of the new operators, we consider
+the do–notation in yet more detail. In the most basic case</p>
+<pre class="haskell"><code>do
+  x1 &lt;- act1
+  x2 &lt;- act2
+  -- ...
+  actN</code></pre>
+<p>desugars as</p>
+<pre class="haskell"><code>act1 &gt;&gt;= \x1 -&gt;
+do
+  x2 &lt;- act2
+  -- ...
+  actN  </code></pre>
+<p>or – using the more applicative operators – as</p>
+<pre class="haskell"><code>spice1 (\x1 -&gt; do
+                 x2 &lt;- act2
+                   -- ...
+                   actN)
+&lt;&lt;#&gt;&gt; act1</code></pre>
+<p>This again illustrates the similarity to (non-recursive)
+<code>let</code> expressions</p>
+<p><label for="tufte-mn-8" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-8" class="margin-toggle"><span class="marginnote"><span style="display: block;">Again, this is a
+hypothetical notation resembling other programming languages and not the
+way <code>let</code> works or is defined in Haskell.</span></span></p>
+<pre class="haskell"><code>let x1 = expr1
+    x2 = expr2
+in expr</code></pre>
+<p>which could be desugared as</p>
+<pre class="haskell"><code>(\x1 -&gt; let x2 = expr2
+        in expr)
+# expr1</code></pre>
+<p>where the function application has been marked with <code>#</code>
+explicitly. Furthermore, the desugared version illustrates again that
+the do–notation is continuation–passing style in disguise, i.e. an
+explicit continuation is constructed and immediately applied.</p>
+<p>As a slightly larger example, consider a program which calls several
+nested functions, i.e.</p>
+<pre class="haskell"><code>c :: Int
+c      = 1
+
+f1 :: Int -&gt; Int
+f1 x   = c * x
+
+f2 :: Int -&gt; Int -&gt; Int
+f2 x y = x + f1 y
+
+prog :: Int
+prog = f2 (f1 c) c</code></pre>
+<p>Now, suppose that the constant <code>c</code> is to be replaced with
+random numbers, i.e. we would want to define a random function which can
+be used instead</p>
+<p><label for="tufte-mn-9" class="margin-toggle">⊕</label><input type="checkbox" id="tufte-mn-9" class="margin-toggle"><span class="marginnote"><span style="display: block;">For convenience we
+could define <code>f1 = spice1 f1’</code> and <code>f2 = spice2
+f2’</code> explicitly and use <code>f1</code> and <code>f2</code>
+directly whenever an application is needed.</span></span></p>
+<pre class="haskell"><code>r :: R.MonadRandom m =&gt; m Int
+r = R.fromList [(1, 0.1), (2, 0.2), (3, 0.3), (4, 0.4)]
+
+f1&#39; :: (Applicative m, R.MonadRandom m) =&gt; Int -&gt; m Int
+f1&#39; x = pure (*) &lt;#&gt; r &lt;#&gt; pure x
+
+f2&#39; :: (Applicative m, R.MonadRandom m) =&gt; Int -&gt; Int -&gt; m Int
+f2&#39; x y = pure (+) &lt;#&gt; pure x &lt;#&gt; (spice1 f1&#39; &lt;&lt;#&gt;&gt; return y)
+
+prog&#39; :: (Applicative m, R.MonadRandom m) =&gt; m Int
+prog&#39; = spice2 f2&#39; &lt;&lt;#&gt;&gt; (spice1 f1&#39; &lt;&lt;#&gt;&gt; r) &lt;&lt;#&gt;&gt; r</code></pre>
+<p>Instead of the larger change required in the translation into the
+do–notation<label for="tufte-sn-13" class="margin-toggle sidenote-number">13</label><input type="checkbox" id="tufte-sn-13" class="margin-toggle"><span class="sidenote"><span class="sidenote-number">13</span> Try this at home!</span>, i.e. naming all intermediate results and
+sequencing, we mechanically replaced each function application. Either
+using the operator <code>&lt;#&gt;</code> when applying pure functions
+(to possibly effectful arguments) or the operator
+<code>&lt;&lt;#&gt;&gt;</code> when applying monadic functions. In turn,
+further simplifications would be possible, e.g. <code>f1&#39; y</code>
+instead of <code>spice1 f1&#39; &lt;&lt;#&gt;&gt; return y</code>.</p>
+<p>In the end, monads allow precise control over side-effects. In
+particular, the type system ensures that only the desired effects are
+possible. In turn, function application needs to explicitly distinguish
+between three cases captured by different operators:</p>
+<ol style="list-style-type: decimal">
+<li><p><code>#</code>: A pure function is applied to pure arguments. No
+effects are executed.</p></li>
+<li><p><code>&lt;#&gt;</code>: A pure function is applied to effectful
+arguments. Effects are executed from left to right.</p></li>
+<li><p><code>&lt;&lt;#&gt;&gt;</code>: An effectful function is applied
+to effectful arguments. Its effects are executed after the arguments’
+effects.</p></li>
+</ol>
+<p>Most programming language only provide the last version, i.e. all
+functions can implicitly contain effects in the single monad that is
+provided by the language designer. Haskell allows much more flexibility
+in this regard and especially when <em>applying our effects/monads</em>
+we can indeed claim that:</p>
+<blockquote>
+<p>In short, Haskell is the world’s finest imperative programming
+language.</p>
+</blockquote>
+<blockquote>
+<footer>
+Simon Peyton Jones
+</footer>
+</blockquote>
 </div>
 </div>
 
