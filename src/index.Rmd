@@ -23,11 +23,21 @@ monofont: LiberationMono
 
 # Thinking in code
 
-## June 9, 2022
+## Jun 9, 2022
 
 An opiniated piece on the "two-language problem" in machine learning
 and my first adventures in APL/J.
 
 [Yes please, take me there](thinkapl.html)
+
+---
+
+## Sep 11, 2022
+
+Thoughts on the do-notation in Haskell and why I don't like it. As an
+alternative, some new combinators are proposed which admit an
+applicative style of programming with monads.
+
+[Read along and see yourself](donot.html)
 
 ---
