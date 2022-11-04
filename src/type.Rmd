@@ -170,8 +170,8 @@ can be implemented differently for different types. In this context, a
 distinction between *nominal* and *structural* typing is made. Whereas
 structural typing only requires that the required operations are
 implemented for the concrete type actually used, nominal typing
-requires an explicit logical type for the operation to be allowed. In
-Julia both versions can be used:
+requires an explicit type for the operation to be allowed. In Julia
+both versions can be used:
 
 ```{marginfigure}
 Note that the distinction between nominal and structural typing is orthogonal
@@ -195,6 +195,9 @@ Structural typing is also known as *duck typing* as any type that
 duck". Here, the types `Int64` and `String` both support the `*`
 operation and can thus be used as inputs for `struct_mul`.
 
+In contrast, nominal typing restricts the use of polymorphic
+functions:
+
 ```julia
 julia> nom_mul(x::Real, y::Real) = x * y
 nom_mul (generic function with 1 method)
@@ -210,8 +213,8 @@ Stacktrace:
 ```
 
 Now, the function `nom_mul` is only applicable for some subtype of
-`Real`. Here, `Real` is a logical or abstract type, i.e., it has
-several explicit subtypes:
+`Real`. Here, `Real` is an abstract type, i.e., no value of it can be
+directly constructed, but it has several explicit subtypes:
 
 ```julia
 julia> using AbstractTrees
@@ -245,29 +248,31 @@ Real
 └─ Rational
 ```
 
-In Julia, only abstract types can have subtypes and every type has
-exactly one supertype with `Any` at the top of the hierarchy. In
+In Julia, only abstract types can have subtypes[^sub] and every type
+has exactly one supertype with `Any` at the top of the hierarchy. In
 contrast to the mental model, the subtype relation is not based on the
 subset relation between possible values -- which would be intractable
 to check in practice -- but needs to be defined explicitly via `T <:
-S` when defining the type $T$. This explicit subtyping provides a
-powerful means to state generic functions, i.e., which can operate on
-several types sharing common behavior. In this respect, the type
-`Real` expresses that its values logically adhere to the concept of
-being real numbers[^real].
+S` when defining the type $T$. 
 
-[^real]: Note that abstract types are not inhabited by any concrete
-    values, i.e., as represented by actual bit sequences. Instead,
-    they can be thought of as the union of all concrete types which
-    are direct or indirect subtypes.
+[^sub]: According to the mental model, abstract types can be thought
+    of as the union of all concrete types which are direct or indirect
+    subtypes. In contrast to union types -- which are also available
+    in Julia -- they can be extended by defining additional subtypes.
 
-Thus, compared to structural typing, nominal typing is more explicit
-in which types are allowed. Thereby, required operations and there
-properties can be expressed and documented more explicitly. Any code
-using a logical type can then assume that all documented operations
-for it are available and furthermore, behave in a particular way. For
-the more mathemtically inclined, the notion of a *monoid* would be a
-good candidate for a logical type:
+This explicit subtyping provides a powerful means to state generic
+functions, i.e., which can operate on several types sharing common
+behavior. In this respect, the type `Real` expresses that its values
+logically adhere to the concept of being real numbers, i.e., it is
+used as a *logical type*.
+
+No matter whether logical types are implemented via structural or
+nominal typing, it is not the type alone that is of interest. Indeed,
+the operations defined for the type are the essence enabling generic
+code. I.e., any code using a logical type can then assume that all
+documented operations for it are available and furthermore, behave in
+a particular way. For the more mathemtically inclined, the notion of a
+*monoid* would be a good candidate for a logical type:
 
 * Type $T$ is a monoid if it supports two operations, namely `one ::
   T` and `* :: T x T -> T`.
@@ -278,22 +283,47 @@ good candidate for a logical type:
 	 
   `*` is associative, i.e., `(x * y) * z == x * (y * z)`
 
-In Haskell, the monoid concept is explicitly expressed as a *type
-class*. Here, type classes correspond to logical types -- nominally
+In Julia, the concept of a monoid is only implicitly defined, i.e.,
+via the functions `one` and `*` and their documented behavior. In
+contrast to other languages, interfaces are not explicitly defined in
+Julia, but only documented alongside the code. In Haskell, `Monoid` is
+explicitly expressed as a *type class*:
+
+```haskell
+class Semigroup m => Monoid m where
+  mempty :: m  -- corresponds to one
+
+  -- defining mappend is unnecessary, it copies from Semigroup
+  mappend :: m -> m -> m  -- corresponds to *
+  mappend = (<>)
+
+  -- defining mconcat is optional, since it has the following default:
+  mconcat :: [m] -> m
+  mconcat = foldr mappend mempty
+```
+
+Such type classes correspond nicely to logical types -- nominally
 expressing their required behaviors -- which in turn can be
 implemented by several types -- providing the actual behaviors on
 concrete types. In contrast to Julia, Haskell enforces nominal typing
 and accordingly ad-hoc polymorphism is more controlled, e.g., requires
 the use of type classes or similar means.
 
-In Julia, only some concepts such as `Real`, `Integer` or
-`AbstractVector` are explicitly specified and accordingly require
-explicit subtyping to enable the use of generic functions on new
-types[^foo]. 
+Note that also in type classes, the required properties, i.e., the
+algebraic laws, of the stated operations are not available to the
+compiler but again documented alongside the code. For instance, the
+monoid laws read as follows in Haskell:
 
-[^foo]: TODO: Work around ...
+```julia
+-- Identity laws
+x <> mempty = x
+mempty <> x = x
 
-*Logical* properties, i.e., supported operations. Abstractions for generic programming.
+-- Associativity
+(x <> y) <> z = x <> (y <> z)
+```
+
+
 
 *Type theory*: Syntactic tag, i.e., restricting range of syntactically
 valid programs. Ideally, such programs will run without errors.
