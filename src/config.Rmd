@@ -1,0 +1,352 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+bibliography: thinkapl.bib
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+# Configurable software
+
+Consider the following [Julia](https://julialang.org/) function:
+
+```julia
+function fun(g, x, y)
+	g(z * (x + y))
+end
+```
+
+What does it do? Well, as it contains the free identifiers `z` we
+cannot know without further context[^global]. Ideally, a function
+should only depend on its inputs enabling local reasoning and better
+reuse as it can be applied independent of any further context.
+
+[^global]: Being just one of the reasons why global variables are
+    frowned upon.
+	
+Let's just fix the above function and pass all free identifiers as
+arguments[^ops]:
+
+[^ops]: Due to syntactic restrictions, Julia does not allow to call
+    functions passed as arguments as infix operators.
+
+```julia
+function fun2(g, x, y, z, plus, mul)
+	g(mul(z, plus(x, y)))
+end
+```
+
+Correct, the identifiers `+` and `*` are also not defined here, i.e.,
+potentially depend on context. While we are used to avoid global
+variables, e.g., containing parameter values or configuration options,
+functions are almost always named globally. Again, this restricts
+reuse and prevents local reasoning, but, in contrast to variables,
+function definitions are often well-known, i.e., documented as part of
+the language or library API, and rarely change.
+
+Yet, as I will show below, modern languages have made functions
+configurable allowing to change the meaning of a program according to
+context. In the end, it is precisely this ability to interpret the
+same program differently that enables generic programming.
+
+## What does it mean?
+
+Now, that all identifiers are explicitly bound, we have a lot of
+flexibilty in using `fun2`. First consider the obvious call
+
+```julia
+julia> fun2(sqrt, 1, 2, 3, +, *)
+3.0
+```
+
+which computes the arithmetic expression $\sqrt{(1 + 2) * 3}$. As a slightly
+more involved example, consider the call
+
+```julia
+julia> fun2(Flux.relu, [1, 2], [1 2; 3 4] \ [-1, 2], [1 2; 3 4], .+ , *)
+2-element Vector{Float64}:
+  4.000000000000001
+ 13.000000000000002
+```
+
+computing -- in a somewhat convoluted way -- the forward pass of a
+dense layer $\mathrm{relu}(W \cdot x + b)$ with
+
+$$
+\begin{align*}
+W &= \left( \begin{array}{cc} 1 & 2 \\ 3 & 4 \end{array} \right) \\
+b &= \left( \begin{array}{c} -1 \\ 2 \end{array} \right) \\
+x &= \left( \begin{array}{c} 1 \\ 2 \end{array} \right) \; .
+\end{align*}
+$$
+
+For the next example, we define
+
+```julia
+function rplus(r1, r2)
+	Regex(string("(?:", r1.pattern, ")|(?:", r2.pattern, ")"))
+end
+```
+
+and call `fun2` as follows:
+
+```julia
+julia> fun2(r -> match(r, "cb"), r"a", r"b", r"c", rplus, *)
+RegexMatch("cb")
+```
+
+Thus, now `plus` constructs a regular expression that macthes either
+of its arguments and `mul` concatenates regular expressions, i.e.,
+matches when both of its arguments match sequentially.
+
+In all of our example calls, we would have obtained the same result
+when `fun` had used the expression `z*x + z*y` instead of `z*(x +
+y)`. I.e., assuming distributivity of `*` over `+` as suggested by the
+mathematical notation. Depending on the interpretation this law might
+not hold though: In contrast to the first examples using arithmetic on
+numbers and matrices/vectors, the regular expression returned from
+`fun2(identity, r"a", r"b", r"c", rplus, *)` could distinguish between
+the two versions of `fun` -- even though the resulting expression
+would match the same strings[^regex].
+
+[^regex]: As the distributive law $\mathcal{L}_{z(x|y)} =
+	\mathcal{L}_{(zx)|(zy)}$ holds for the language recognized by the
+	formal regular expressions constructed via concatenation and
+	alternation $|$.
+	
+## Generic programming
+
+Generic programming relies on the fact that the same program can be
+interpreted differently -- just as our example function `fun2`
+above. In most programming languages, *polymorphism* enables this kind
+of flexibility by coupling the meaning of functions/operators to the
+data types used. This is indeed a very good idea as often the data
+type provides enough context for an unambiguous interpretation of
+operations for that type.
+
+In Julia, all functions can be extended with new methods, i.e.,
+defined for novel combinations of data types. Thereby, programs become
+configurable by passing different argument types:
+
+```julia
+function fun(g, x, y, z)
+	g(z*(x + y))
+end
+```
+
+In case of numeric and matrix/vector arguments the required methods
+for `+` and `*` are already defined and accordingly, the calls
+
+```julia
+julia> fun(Flux.relu, [1, 2], [1 2; 3 4] \ [-1, 2], [1 2; 3 4])
+2-element Vector{Float64}:
+  4.000000000000001
+ 13.000000000000002
+
+julia> fun(sqrt, 1, 2, 3)
+3.0
+```
+
+work as expected. For regular expressions, concatenation is already
+available[^regmul], but alternation needs to be defined[^piracy]:
+
+[^regmul]: Try `@which r"a" * r"b"` in the Julia REPL.
+
+[^piracy]: Extending `Base.+` on existing types is considered bad
+    practice, i.e., "type piracy", and only used for illustrative
+    purposes here.
+
+```julia
+julia> Base.:+(r1::Regex, r2::Regex) = rplus(r1, r2)
+
+julia> fun(identity, r"a", r"b", r"c")
+r"(?:c)(?:(?:a)|(?:b))"
+```
+
+Current programming languages differ in their ability to (re)configure
+programs after these have been written:
+
+1. In C or Python, only a single global function definition exists,
+   i.e., disallowing multiple configurations.
+   
+2. OOP languages allow for polymorphism based on the type of the
+   object receiving the method, i.e., restricting polymorphism to a
+   single argument and sometimes, methods have to be explicitly marked
+   for extension (e.g. declared as `virtual` in C++).
+   
+3. Some statically compiled languages support generic programming
+   given that the required configuration can be decided at compile
+   time, i.e., via template metaprogramming (C++) or typeclasses
+   (Haskell).
+
+4. Monads and effect systems allow to configure side-effects[^monad],
+   i.e., with user-defined combinations and interactions between
+   different types of effects, e.g., assignment and non-determinism.
+
+5. Multiple dispatch as in Julia or Common Lisp allows to extend
+   methods at runtime. Lisp in addition supports dynamically scoped
+   variables enabling further configuration at runtime[^dynfun].
+   
+[^monad]: While monads are usually implemented by compile-time
+    constructs, effect systems resemble exception handling constructs
+    which are commonly dynamically scoped.
+   
+[^dynfun]: Especially, [dynamically scoped functions](https://dl.acm.org/doi/10.1145/944579.944587)
+	have been shown to provide similar runtime configuration as discussed in aspect-oriented
+	programming.
+	
+### Special forms
+
+While generic functions allow different implementations of the same function, e.g., 
+depending on the argument types, the underlying language semantics can usually
+not be changed. As an example consider [Symbolics.jl](https://symbolics.juliasymbolics.org/stable/)
+enabling symbolic computations:
+
+```julia
+julia> using Symbolics
+
+julia> @variables x, y
+2-element Vector{Num}:
+ x
+ y
+
+julia> fun(sqrt, x, y, 3)
+sqrt(3x + 3y)
+```
+
+While the `fun` example works, the following will fail:
+
+```julia
+julia> fac(n) = if n < 1 1 else n * fac(n-1) end
+fac (generic function with 1 method)
+
+julia> fac(x)
+ERROR: TypeError: non-boolean (Num) used in boolean context
+```
+
+The reason being that a symbolic interpretation of an `if` clause
+would require non-standard semantics, i.e., in order to construct an
+expression containing both branches, then as well as else, of the if
+expression.
+
+If we had control over conditionals and function calls as well, the
+following would work:
+
+```julia
+julia> fun(5)
+120
+
+julia> fun(x)
+:(if x < 1
+      1
+  else
+      x*recur(x - 1)
+  end)
+```
+
+We can indeed make this work, by introducing functions for
+conditionals[^squeak] and recursive calls.
+
+[^squeak]: In most languages conditionals are special forms, i.e.,
+    with non-standard evaluation semantics and cannot be user-defined
+    or extended. Notable exceptions being Haskell, which has lazy
+    evaluation anyways, and Smalltalk, which actually defines if as a
+    regular method taking code blocks as arguments, i.e., just like
+    `fif`.
+
+```julia
+fif(x, y, z) = if x y() else z() end
+fif(x::Num, y, z) = :(if $x; $(y()) else $(z()) end)
+
+recur(f, x) = f(x)
+@register_symbolic recur(it)
+recur(f, x::Num) = recur(x)
+
+fac(n) = fif(n < 1, () -> 1, () -> n * recur(fac, n-1))
+```
+
+Extensibility is always a trade-off as fewer properties can be assumed
+for more general code. In the end, i.e., if every construct could be
+extended arbitrarily, without knowing the actual evaluation context,
+nothing about the program semantic would be known. For that reason,
+most languages include special forms and other language constructs
+which cannot be defined or changed by user code. In particular,
+compiler passes, such as for type inference or optimizations, can
+usually not be changed via user code[^macros].
+
+[^macros]: In principle, macros enable similar transformations. Yet,
+    emulating compiler passes is difficult at the level of the
+    abstract syntax tree and requires at least a code-walker, i.e., a
+    program tracking the semantics -- with respect to evaluation and
+    scoping rules -- of every expression.
+
+In the end, generic functions are harder to read and write as
+functions defined on single types as they require abstractions. In
+particular, it needs to be clear what can and cannot be assumed. I.e.,
+in Julia `*` can usually be considered as a monoid operation. In
+contrast, `+` should only be extended if a group operation or action
+can be defined[^hask]:
+
+[^hask]: In Haskell, typeclasses commonly state which (algebraic) laws
+    can be assumed to hold for their operations. Thereby, formalizing
+    the required abstractions required to understand generic code.
+
+```julia
+julia> "ab" * one(String) * "c"  # Monoid operation
+"abc"
+
+julia> [1, 2, 3] - [1, 2, 3] ==  zero([1,2,3])  # Group operation
+true
+
+julia> Date(2023, 1, 1) + Month(4) + Day(3)  # Group action
+2023-05-04
+```
+
+Thus, `using` a library not just defines new types and functions, but
+also provides novel contexts for existing generic functions. This is
+also the main reason that "type piracy", i.e., defining methods of
+generic functions and types from other libraries/modules, should be
+avoided as it might break existing code. Similarly, violating
+implicitly assumed abstractions might lead to correctness
+problems. Despite these issues[^typed], generic programming is very powerful
+and often allows to combine functionalities in novel ways, i.e.,
+reinterpreting existing programs in novel contexts. As a convinicing
+example try
+
+[^typed]: Statically typed languages like Haskell provide somewhat
+    stronger guarantees, yet type class laws cannot be automatically
+    checked yet. Similarly, the Rust compiler disallows memory errors,
+    race conditions as well as type piracy.
+
+```julia
+julia> using MonteCarloMeasurements
+
+julia> using Distributions
+
+julia> σ = 1.2 ± 0.1  # uncertain standard deviation
+1.2 ± 0.1
+
+julia> quantile.(Normal(0, σ), [0.1, 0.5, 0.9])  # correspondingly uncertain quantiles
+3-element Vector{Measurement{Float64}}:
+ -1.54 ± 0.13
+   0.0 ± 0.0
+  1.54 ± 0.13
+```
+
+or just watch [The unreasonable effectiveness of multiple
+dispatch](https://www.youtube.com/watch?v=kc9HwsxE1OY) and embrace
+configurable programming in your language of choice.
