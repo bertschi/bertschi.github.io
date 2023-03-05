@@ -30,7 +30,7 @@ function fun(g, x, y)
 end
 ```
 
-What does it do? Well, as it contains the free identifiers `z` we
+What does it do? Well, as it contains the free identifier `z` we
 cannot know without further context[^global]. Ideally, a function
 should only depend on its inputs enabling local reasoning and better
 reuse as it can be applied independent of any further context.
@@ -134,9 +134,9 @@ Generic programming relies on the fact that the same program can be
 interpreted differently -- just as our example function `fun2`
 above. In most programming languages, *polymorphism* enables this kind
 of flexibility by coupling the meaning of functions/operators to the
-data types used. This is indeed a very good idea as often the data
-type provides enough context for an unambiguous interpretation of
-operations for that type.
+data types or classes of the values passed as arguments. This is
+indeed a very good idea as the data types often provide enough context
+to pick an unambiguous interpretation of operations.
 
 In Julia, all functions can be extended with new methods, i.e.,
 defined for novel combinations of data types. Thereby, programs become
@@ -192,6 +192,12 @@ programs after these have been written:
    given that the required configuration can be decided at compile
    time, i.e., via template metaprogramming (C++) or typeclasses
    (Haskell).
+   
+   Similarly,
+	[Scala](https://docs.scala-lang.org/tour/implicit-parameters.html)
+	has an interesting take on configuration with implicit parameters
+	which are lexically scoped and matched by the compiler based on
+	types
 
 4. Monads and effect systems allow to configure side-effects[^monad],
    i.e., with user-defined combinations and interactions between
@@ -202,12 +208,13 @@ programs after these have been written:
    variables enabling further configuration at runtime[^dynfun].
    
 [^monad]: While monads are usually implemented by compile-time
-    constructs, effect systems resemble exception handling constructs
-    which are commonly dynamically scoped.
+    constructs, modern effect systems resemble exception handling
+    constructs which are commonly dynamically scoped.
    
-[^dynfun]: Especially, [dynamically scoped functions](https://dl.acm.org/doi/10.1145/944579.944587)
-	have been shown to provide similar runtime configuration as discussed in aspect-oriented
-	programming.
+[^dynfun]: Especially, [dynamically scoped
+	functions](https://dl.acm.org/doi/10.1145/944579.944587) have been
+	shown to provide similar ways of (runtime) configuration as
+	discussed in aspect-oriented programming.
 	
 ### Special forms
 
@@ -280,13 +287,13 @@ fac(n) = fif(n < 1, () -> 1, () -> n * recur(fac, n-1))
 ```
 
 Extensibility is always a trade-off as fewer properties can be assumed
-for more general code. In the end, i.e., if every construct could be
-extended arbitrarily, without knowing the actual evaluation context,
-nothing about the program semantic would be known. For that reason,
-most languages include special forms and other language constructs
-which cannot be defined or changed by user code. In particular,
-compiler passes, such as for type inference or optimizations, can
-usually not be changed via user code[^macros].
+for more general code. I.e., if every construct could be extended
+arbitrarily, without knowing the actual evaluation context, nothing
+about the program semantic would be known. For that reason, most
+languages include special forms and other language constructs which
+cannot be defined or changed by user code. In particular, compiler
+passes, such as for type inference or optimizations, can usually not
+be changed via user code[^macros].
 
 [^macros]: In principle, macros enable similar transformations. Yet,
     emulating compiler passes is difficult at the level of the
@@ -316,16 +323,19 @@ julia> Date(2023, 1, 1) + Month(4) + Day(3)  # Group action
 2023-05-04
 ```
 
-Thus, `using` a library not just defines new types and functions, but
-also provides novel contexts for existing generic functions. This is
-also the main reason that "type piracy", i.e., defining methods of
-generic functions and types from other libraries/modules, should be
-avoided as it might break existing code. Similarly, violating
-implicitly assumed abstractions might lead to correctness
-problems. Despite these issues[^typed], generic programming is very powerful
-and often allows to combine functionalities in novel ways, i.e.,
-reinterpreting existing programs in novel contexts. As a convinicing
-example try
+Thus, `using` a library not just provides new types and functions, but
+also provides novel contexts for existing generic functions. Thereby
+extending and changing the behavior of already existing code which
+arguably explains the "unreasonable effectiveness of
+multiple-dispatch".  On the other hand, it is also the main reason
+that "type piracy", i.e., defining methods of generic functions and
+types from other libraries/modules, should be avoided as this might
+break existing code. Similarly, violating implicitly assumed
+abstractions might lead to correctness problems. Despite these
+issues[^typed], the configurability of generic functions is very
+powerful and often allows to combine functionalities in novel ways,
+i.e., reinterpreting existing programs in novel contexts. As a
+convinicing example try
 
 [^typed]: Statically typed languages like Haskell provide somewhat
     stronger guarantees, yet type class laws cannot be automatically
@@ -348,5 +358,6 @@ julia> quantile.(Normal(0, σ), [0.1, 0.5, 0.9])  # correspondingly uncertain qu
 ```
 
 or just watch [The unreasonable effectiveness of multiple
-dispatch](https://www.youtube.com/watch?v=kc9HwsxE1OY) and embrace
-configurable programming in your language of choice.
+dispatch](https://www.youtube.com/watch?v=kc9HwsxE1OY) and try to
+understand what your language of choice offers in terms of
+configurable programming.
