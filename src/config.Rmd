@@ -73,7 +73,7 @@ julia> fun2(sqrt, 1, 2, 3, +, *)
 3.0
 ```
 
-which computes the arithmetic expression $\sqrt{(1 + 2) * 3}$. As a slightly
+which computes the arithmetic expression $\sqrt{3 \cdot (1 + 2)}$. As a slightly
 more involved example, consider the call
 
 ```julia
@@ -197,7 +197,7 @@ programs after these have been written:
 	[Scala](https://docs.scala-lang.org/tour/implicit-parameters.html)
 	has an interesting take on configuration with implicit parameters
 	which are lexically scoped and matched by the compiler based on
-	types
+	types.
 
 4. Monads and effect systems allow to configure side-effects[^monad],
    i.e., with user-defined combinations and interactions between
@@ -247,7 +247,7 @@ ERROR: TypeError: non-boolean (Num) used in boolean context
 
 The reason being that a symbolic interpretation of an `if` clause
 would require non-standard semantics, i.e., in order to construct an
-expression containing both branches, then as well as else, of the if
+expression containing both branches, *then* as well as *else*, of the if
 expression.
 
 If we had control over conditionals and function calls as well, the
@@ -302,11 +302,11 @@ be changed via user code[^macros].
     scoping rules -- of every expression.
 
 In the end, generic functions are harder to read and write as
-functions defined on single types as they require abstractions. In
-particular, it needs to be clear what can and cannot be assumed. I.e.,
-in Julia `*` can usually be considered as a monoid operation. In
-contrast, `+` should only be extended if a group operation or action
-can be defined[^hask]:
+functions defined on single types. In particular, they require
+abstractions clarifying the properties of functions that can and
+cannot be assumed. I.e., in Julia `*` can usually be considered as a
+monoid operation. In contrast, `+` should only be extended if a group
+operation or action can be defined[^hask]:
 
 [^hask]: In Haskell, typeclasses commonly state which (algebraic) laws
     can be assumed to hold for their operations. Thereby, formalizing
@@ -323,15 +323,15 @@ julia> Date(2023, 1, 1) + Month(4) + Day(3)  # Group action
 2023-05-04
 ```
 
-Thus, `using` a library not just provides new types and functions, but
-also provides novel contexts for existing generic functions. Thereby
-extending and changing the behavior of already existing code which
-arguably explains the "unreasonable effectiveness of
-multiple-dispatch".  On the other hand, it is also the main reason
-that "type piracy", i.e., defining methods of generic functions and
-types from other libraries/modules, should be avoided as this might
-break existing code. Similarly, violating implicitly assumed
-abstractions might lead to correctness problems. Despite these
+Due to method definitions, `using` a library not just provides new
+types and functions, but also provides novel contexts for existing
+generic functions. Thereby extending and changing the behavior of
+already existing code which arguably explains the "unreasonable
+effectiveness of multiple-dispatch".  On the other hand, it is also
+the main reason that "type piracy", i.e., defining new methods for generic
+functions and types from other libraries/modules, should be avoided as
+this might break existing code. Similarly, violating implicitly
+assumed abstractions might lead to correctness problems. Despite these
 issues[^typed], the configurability of generic functions is very
 powerful and often allows to combine functionalities in novel ways,
 i.e., reinterpreting existing programs in novel contexts. As a
@@ -359,5 +359,5 @@ julia> quantile.(Normal(0, σ), [0.1, 0.5, 0.9])  # correspondingly uncertain qu
 
 or just watch [The unreasonable effectiveness of multiple
 dispatch](https://www.youtube.com/watch?v=kc9HwsxE1OY) and try to
-understand what your language of choice offers in terms of
-configurable programming.
+teach your old code new tricks via configurable programming. Maybe
+also your language of choice has something to offer in this respect ...
