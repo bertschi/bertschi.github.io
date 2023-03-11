@@ -1,0 +1,348 @@
+---
+title: "Lost in code"
+author: "*A blog on programming and what it could be*"
+output:
+  tufte::tufte_handout:
+    latex_engine: xelatex
+    keep_tex: true
+  tufte::tufte_html: default
+mainfont: LiberationSerif
+sansfont: LiberationSans
+monofont: LiberationMono
+bibliography: thinkapl.bib
+---
+
+```{marginfigure}
+[Blog home](index.html)
+
+[About me](about.html)
+
+[Privacy](privacy.html)
+```
+
+# What's in a type?
+
+Types are one of the most fundamental abstractions in programming
+languages. Originally, the need of types arises from the need to store
+different *kinds/types* of data, e.g., integers or characters, in the
+computer's memory. Yet, in memory all bits are equal and thus the
+notion of type is needed to correctly *interpret* the bits at a
+particular memory location.
+
+To this end, types can either be tracked at compile time, i.e., the
+compiler tracks or infers the type of each expression based on
+syntatic information alone and generates code containing the machine
+instructions suitable for each type. This approach is commonly known
+as *static typing* and has the advantage that type based optimizations
+can be incorporated into the compiler. Furthermore, no runtime
+representation of type information -- adding additional overheads to
+the generated code -- is required.
+
+In contrast, *dynamic typing* explicitly represents type information
+along with each value. This has the advantage that type information is
+available during the execution of a programm allowing for powerful
+reflective facilities. The distinction between static and dynamic
+typing has been debated extensively -- including many flame wars --
+and I will not add to this debate here, but instead consider
+alternative materializations and uses of types.
+
+*Mental model*
+
+More formally, a type can be considered as a set of possible values,
+i.e., integer denoting the possible numeric values $\{\ldots, -2, -1,
+0, 1, 2, \ldots\}$ or character denoting $\{a, b, c, \ldots, A, B, C,
+\ldots\}$. This idea serves as a useful *mental model* for
+understanding types in many programming languages[^mm]. In particular,
+several relationships between different types follow rather naturally
+from this model:
+
+[^mm]: While this models covers types in many programming languages,
+    it does not facefully respresent all uses/notions of types. In
+    particular, classes in OOP languages are often not types according
+    to this model, especially when [multiple
+    inheritance](https://en.wikipedia.org/wiki/Multiple_inheritance)
+    is involved.
+
+* *Subtyping*: A type $T$ is a subtype of $S$ iff $T \subseteq S$,
+  i.e., the set of possible values of $T$ is a subset of the possible
+  values of $S$ or stated differently, every possible value of $T$ is
+  also a value of $S$.
+  
+* *Liskov substitution principle*:
+
+  > Let $\phi (x)$ be a property provable about objects $x$ of type
+  > $T$. Then $\phi (y)$ should be true for objects $y$ of type $S$ where
+  > $S$ is a subtype of $T$.
+
+The Liskov substitution principle has since been popularized as an
+important design principle in OOP. In this context, following this
+principle ensures that classes essentially obey the mental model of
+types as sets of values. Furthermore, it enables generic programming,
+i.e., ensuring that subtypes can by substituted whenever a desired
+behavior is defined for a supertype. For that reason, it is also known
+as *behavioral subtyping*.
+
+Now, with a suitable mental model in place, let us explore several
+uses of types in Julia or similar languages[^julia].
+
+[^julia]: Here, I choose Julia as an example since its type system
+    supports several operations on types. In particular, user-defined
+    bit types and ad-hoc polymorphism is readily supported. Other
+    languages, e.g., C++, Common Lisp or Haskell, would work as well.
+
+## Other uses of types
+
+*Physical types*
+
+As already mentioned, an important use of types is the interpretation
+of bits in memory. This can be referred to as a *physical* notion of
+type. Furthermore, all bit types are *concrete types*, i.e., each of
+their possible values is inhabited and represented by some bit
+sequence as existing in the physical memory.
+
+```julia
+julia> u = 0x10FF  # Hexadecimal number
+0x10ff
+
+julia> typeof(u)  # Its type 
+UInt16
+
+julia> bitstring(u)  # Bits of that number
+"0001000011111111"
+
+julia> reinterpret(Int16, u)  # Same bits interpreted as signed integer
+4351
+
+julia> reinterpret(Float16, u)  # Same bits interpreted as IEEE float
+Float16(0.00061)
+```
+
+Thus, the physical type allows to interpret the bits in memory and
+thereby ensures that operations on the values represented by them work
+as desired:
+
+```julia
+julia> mul(x, y) = x * y
+mul (generic function with 1 method)
+
+julia> @code_llvm mul(1, 2)
+;  @ REPL[51]:1 within `mul`
+define i64 @julia_mul_675(i64 signext %0, i64 signext %1) #0 {
+top:
+; ┌ @ int.jl:88 within `*`
+   %2 = mul i64 %1, %0
+; └
+  ret i64 %2
+}
+
+julia> @code_llvm mul(1.0, 2.0)
+;  @ REPL[51]:1 within `mul`
+define double @julia_mul_677(double %0, double %1) #0 {
+top:
+; ┌ @ float.jl:385 within `*`
+   %2 = fmul double %0, %1
+; └
+  ret double %2
+}
+```
+
+Note that different LLVM machine instructions are emitted, depending
+on whether the inputs are to be considered as integer or floating
+point numbers. In general, every compiler must generate code with
+different instructions as the hardware is usually not distinguishing
+between bits of different types.
+
+*Logical types*
+
+Another important use of types is to express behavioral properties at
+a more abstract level. I.e., all number types should support
+meaningful operations such as addition or multiplication. In Julia
+this allows the function `mul` from above to work on any concrete type
+implementing a suitable `*` operation.
+
+```julia
+julia> mul("Hello", "world")  # Yes, strings can be multiplied as well
+"Helloworld"
+```
+
+This is also known as *ad-hoc polymorphism*, i.e., the same operation
+can be implemented differently for different types. In this context, a
+distinction between *nominal* and *structural* typing is made. Whereas
+structural typing only requires that the required operations are
+implemented for the concrete type actually used, nominal typing
+requires an explicit type for the operation to be allowed. In Julia
+both versions can be used:
+
+```{marginfigure}
+Note that the distinction between nominal and structural typing is orthogonal
+to the one between static and dynamic typing. Most dynamic languages allow structural
+typing, while most static languages require nominal typing though.
+```
+
+```julia
+julia> struct_mul(x, y) = x * y
+struct_mul (generic function with 1 method)
+
+julia> struct_mul(1, 2)  # Works, as * is defined for integers
+2
+
+julia> struct_mul("Ha", "ha")  # Works as * is defined for strings
+"Haha"
+```
+
+Structural typing is also known as *duck typing* as any type that
+"walks like a duck and quacks like a duck" can be considered to "be a
+duck". Here, the types `Int64` and `String` both support the `*`
+operation and can thus be used as inputs for `struct_mul`.
+
+In contrast, nominal typing restricts the use of polymorphic
+functions:
+
+```julia
+julia> nom_mul(x::Real, y::Real) = x * y
+nom_mul (generic function with 1 method)
+
+julia> nom_mul(1, 2)
+2
+
+julia> nom_mul("Hu", "hu")
+ERROR: MethodError: no method matching nom_mul(::String, ::String)
+Stacktrace:
+ [1] top-level scope
+   @ REPL[62]:1
+```
+
+Now, the function `nom_mul` is only applicable for some subtype of
+`Real`. Here, `Real` is an abstract type, i.e., no value of it can be
+directly constructed, but it has several explicit subtypes:
+
+```julia
+julia> using AbstractTrees
+
+julia> AbstractTrees.children(d::DataType) = subtypes(d)
+
+julia> print_tree(Real)
+Real
+├─ AbstractFloat
+│  ├─ BigFloat
+│  ├─ Float16
+│  ├─ Float32
+│  └─ Float64
+├─ AbstractIrrational
+│  └─ Irrational
+├─ Integer
+│  ├─ Bool
+│  ├─ Signed
+│  │  ├─ BigInt
+│  │  ├─ Int128
+│  │  ├─ Int16
+│  │  ├─ Int32
+│  │  ├─ Int64
+│  │  └─ Int8
+│  └─ Unsigned
+│     ├─ UInt128
+│     ├─ UInt16
+│     ├─ UInt32
+│     ├─ UInt64
+│     └─ UInt8
+└─ Rational
+```
+
+In Julia, only abstract types can have subtypes[^sub] and every type
+has exactly one supertype with `Any` at the top of the hierarchy. In
+contrast to the mental model, the subtype relation is not based on the
+subset relation between possible values -- which would be intractable
+to check in practice -- but needs to be defined explicitly via `T <:
+S` when defining the type $T$. 
+
+[^sub]: According to the mental model, abstract types can be thought
+    of as the union of all concrete types which are direct or indirect
+    subtypes. In contrast to union types -- which are also available
+    in Julia -- they can be extended by defining additional subtypes.
+
+This explicit subtyping provides a powerful means to state generic
+functions, i.e., which can operate on several types sharing common
+behavior. In this respect, the type `Real` expresses that its values
+logically adhere to the concept of being real numbers, i.e., it is
+used as a *logical type*.
+
+No matter whether logical types are implemented via structural or
+nominal typing, it is not the type alone that is of interest. Indeed,
+the operations defined for the type are the essence enabling generic
+code. I.e., any code using a logical type can then assume that all
+documented operations for it are available and furthermore, behave in
+a particular way. For the more mathemtically inclined, the notion of a
+*monoid* would be a good candidate for a logical type:
+
+* Type $T$ is a monoid if it supports two operations, namely `one ::
+  T` and `* :: T x T -> T`.
+  
+* Furthermore, the following properties need to hold:
+
+  `one` is left and right unit to `*`, i.e., `one * x == x == x * one`
+	 
+  `*` is associative, i.e., `(x * y) * z == x * (y * z)`
+
+In Julia, the concept of a monoid is only implicitly defined, i.e.,
+via the functions `one` and `*` and their documented behavior. In
+contrast to other languages, interfaces are not explicitly defined in
+Julia, but only documented alongside the code. In Haskell, `Monoid` is
+explicitly expressed as a *type class*:
+
+```haskell
+class Semigroup m => Monoid m where
+  mempty :: m  -- corresponds to one
+
+  -- defining mappend is unnecessary, it copies from Semigroup
+  mappend :: m -> m -> m  -- corresponds to *
+  mappend = (<>)
+
+  -- defining mconcat is optional, since it has the following default:
+  mconcat :: [m] -> m
+  mconcat = foldr mappend mempty
+```
+
+Such type classes correspond nicely to logical types -- nominally
+expressing their required behaviors -- which in turn can be
+implemented by several types -- providing the actual behaviors on
+concrete types. In contrast to Julia, Haskell enforces nominal typing
+and accordingly ad-hoc polymorphism is more controlled, e.g., requires
+the use of type classes or similar means.
+
+Note that also in type classes, the required properties, i.e., the
+algebraic laws, of the stated operations are not available to the
+compiler but again documented alongside the code. For instance, the
+monoid laws read as follows in Haskell:
+
+```julia
+-- Identity laws
+x <> mempty = x
+mempty <> x = x
+
+-- Associativity
+(x <> y) <> z = x <> (y <> z)
+```
+
+
+
+*Type theory*: Syntactic tag, i.e., restricting range of syntactically
+valid programs. Ideally, such programs will run without errors.
+
+[nominal/structural](https://lexi-lambda.github.io/blog/2020/01/19/no-dynamic-type-systems-are-not-inherently-more-open/)
+
+*Domain thinking*: Types for documentation and static correctness, i.e., `Email` or [safe strings](https://blog.moertel.com/posts/2006-10-18-a-type-based-solution-to-the-strings-problem.html)
+
+*Missing types*: Shape in tensor computations or dimensions/units in
+physical simulations.
+
+```julia
+
+```
+
+```julia
+
+```
+
+```julia
+
+```

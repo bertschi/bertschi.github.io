@@ -41,3 +41,14 @@ applicative style of programming with monads.
 [Read along and see yourself](donot.html)
 
 ---
+
+## Mar 11, 2023
+
+A piece connecting global variables -- a common code smell -- with
+*generic programming* -- the hallmark of extensibility. In the end,
+both draw their power (for use and abuse) from the ability to
+reconfigure the meaning of existing code for novel contexts.
+
+[Reconfigure my code](config.html)
+
+---
